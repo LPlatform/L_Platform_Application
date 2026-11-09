@@ -7,25 +7,36 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    outputs:
+      workspace-configured: ${{ steps.project.outputs.configured }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - id: project
+        shell: bash
+        run: |
+          if [[ -f Cargo.toml ]]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo 'Rust fmt/clippy/tests: SKIPPED (no Cargo workspace).' >> "$GITHUB_STEP_SUMMARY"
+          fi
   rust:
+    needs: readiness
+    if: needs.readiness.outputs.workspace-configured == 'true'
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Check Rust workspace readiness
-        id: project
-        shell: bash
-        run: |
-          if [[ -f Cargo.toml ]]; then echo 'ready=true' >> "$GITHUB_OUTPUT"; else echo 'ready=false' >> "$GITHUB_OUTPUT"; echo '::notice::Cargo workspace not configured; Rust checks deferred.'; echo 'Rust checks: NOT CONFIGURED.' >> "$GITHUB_STEP_SUMMARY"; fi
-      - name: Install stable Rust
-        if: steps.project.outputs.ready == 'true'
-        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - run: cargo fmt --all -- --check
-        if: steps.project.outputs.ready == 'true'
       - run: cargo clippy --workspace --all-targets -- -D warnings
-        if: steps.project.outputs.ready == 'true'
       - run: cargo test --workspace --all-targets
-        if: steps.project.outputs.ready == 'true'

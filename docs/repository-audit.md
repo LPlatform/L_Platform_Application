@@ -12,4 +12,4 @@ Audit date: 2026-11-09. Source: authenticated GitHub API and the initial local c
 | Actions / tests / ignored files / release config | None existed at audit time. |
 | README | None existed at audit time. |
 
-No source or useful configuration was present to preserve. This PR adds governance and workflow foundations plus repository-policy smoke tests only. React/Tauri application, Rust workspace/toolchain, pnpm lockfile, product tests and signing credentials remain unconfigured. macOS is optional; Linux ARM64 is not enabled. No signing or release readiness is claimed.
+No source or useful configuration was present to preserve. This PR adds governance and workflow foundations plus repository-policy smoke tests only. React/Tauri application, Rust workspace, pnpm lockfile, product tests and signing credentials remain unconfigured. Node and Rust toolchains are now pinned. macOS is optional; Linux ARM64 is not enabled. No signing or release readiness is claimed.

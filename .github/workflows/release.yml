@@ -3,9 +3,33 @@ on:
   push:
     tags: ['app-v*.*.*']
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  TAG: ${{ github.ref_name }}
 jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0 }
+      - name: Validate SemVer tag and main ancestry
+        run: |
+          [[ "$TAG" =~ ^app-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          git merge-base --is-ancestor "$TAG" origin/main
+      - name: Refuse an existing release
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY"; then
+            echo 'A GitHub Release already exists for this tag; refusing to overwrite it.'
+            exit 1
+          fi
   build:
+    needs: validate-tag
     strategy:
       fail-fast: false
       matrix:
@@ -15,38 +39,42 @@ jobs:
           - os: ubuntu-24.04
             target: linux-x64
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { fetch-depth: 0 }
-      - name: Verify tag and approved main ancestry
+      - name: Require initialized desktop project
         shell: bash
-        env: { TAG: '${{ github.ref_name }}' }
-        run: |
-          [[ "$TAG" =~ ^app-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          git merge-base --is-ancestor "$TAG" origin/main
-      - name: Require configured application
-        run: |
-          if [[ ! -f package.json || ! -f pnpm-lock.yaml || ! -f src-tauri/tauri.conf.json ]]; then
-            echo 'Release blocked: pnpm project, frozen lockfile, and Tauri config are required.'
-            exit 1
-          fi
+        run: test -f package.json && test -f pnpm-lock.yaml && test -f src-tauri/tauri.conf.json
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with: { node-version: 24 }
-      - name: Install Linux build prerequisites
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install Linux Tauri prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev libwebkit2gtk-4.1-dev
       - run: corepack enable && corepack prepare pnpm@11.25.0 --activate
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
-      - run: pnpm tauri build
-      - name: Generate SHA-256 checksums (Windows)
+      - name: Run frontend quality and test gates
+        run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
+      - name: Build native installer
+        run: pnpm tauri build
+      - name: Verify Windows installers and write checksums
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Get-ChildItem -Recurse src-tauri/target/release/bundle -File | ForEach-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash + '  ' + $_.Name } | Set-Content SHA256SUMS.txt
-      - name: Generate SHA-256 checksums (Linux)
+        run: |
+          $files = Get-ChildItem -Path src-tauri/target/release/bundle -Include *.msi,*.exe -File -Recurse
+          if ($files.Count -eq 0) { throw 'No MSI or NSIS installer was produced.' }
+          $lines = $files | ForEach-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash + '  ' + $_.Name }
+          $lines | Set-Content SHA256SUMS.txt
+      - name: Verify Linux packages and write checksums
         if: runner.os == 'Linux'
         shell: bash
-        run: find src-tauri/target/release/bundle -type f -print0 | xargs -0 sha256sum > SHA256SUMS.txt
+        run: |
+          find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0 | xargs -0 -r sha256sum > SHA256SUMS.txt
+          test -s SHA256SUMS.txt || { echo 'No Debian package or AppImage was produced.'; exit 1; }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.target }}
@@ -54,16 +82,23 @@ jobs:
             src-tauri/target/release/bundle/**
             SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 30
   publish:
     needs: build
     runs-on: ubuntu-latest
-    permissions: { contents: write, actions: read }
+    permissions:
+      contents: write
+      actions: read
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with: { path: release-artifacts }
-      - name: Publish GitHub Release
-        env: { GH_TOKEN: '${{ github.token }}', TAG: '${{ github.ref_name }}' }
+      - name: Create release with installers, checksums, and generated notes
+        env: { GH_TOKEN: '${{ github.token }}' }
         run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY"; then
+            echo 'A GitHub Release already exists for this tag; refusing to overwrite it.'
+            exit 1
+          fi
           mapfile -t assets < <(find release-artifacts -type f -print)
           test "${#assets[@]}" -gt 0
           gh release create "$TAG" "${assets[@]}" --generate-notes --verify-tag
