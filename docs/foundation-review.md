@@ -20,4 +20,4 @@ The `app-v*` tag ruleset is active and blocks tag updates/deletion. `main` prote
 
 GitHub release notes are generated, but `CHANGELOG.md` is maintained manually and no automatic version-bump PR/version source is configured. No installer has been built or signed. Production/release Environments and signing credentials are absent; the owner must create protected Environments, select reviewers/allowed refs, then configure authorized signing credentials. Provider/compiler runtime distribution remains separate.
 
-Latest workflow outcomes for the reviewed head are available on [PR #1](https://github.com/LPlatform/L_Platform_Application/pull/1). Reruns caused by this review commit must be used for final verification; earlier PR successes predate these changes.
+Verified PR head `d7bd9a1`: `bootstrap-smoke` passed; CodeQL, dependency review, Linux/Windows build, and Rust jobs were explicitly skipped due to absent source/lockfiles/workspace. Readiness jobs completed, required status contexts matched, and the PR status is clean. No application build/test is claimed. The report-only follow-up commit also reruns bootstrap CI.
