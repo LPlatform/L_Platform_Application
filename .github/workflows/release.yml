@@ -6,7 +6,6 @@ permissions:
   contents: write
 jobs:
   build:
-    if: ${{ hashFiles('package.json') != '' && hashFiles('pnpm-lock.yaml') != '' && hashFiles('src-tauri/tauri.conf.json') != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +24,12 @@ jobs:
         run: |
           [[ "$TAG" =~ ^app-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           git merge-base --is-ancestor "$TAG" origin/main
+      - name: Require configured application
+        run: |
+          if [[ ! -f package.json || ! -f pnpm-lock.yaml || ! -f src-tauri/tauri.conf.json ]]; then
+            echo 'Release blocked: pnpm project, frozen lockfile, and Tauri config are required.'
+            exit 1
+          fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: 24 }
       - name: Install Linux build prerequisites
@@ -34,14 +39,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
       - run: pnpm tauri build
-      - name: Generate SHA-256 checksums
+      - name: Generate SHA-256 checksums (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Get-ChildItem -Recurse src-tauri/target/release/bundle -File | ForEach-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash + '  ' + $_.Name } | Set-Content SHA256SUMS.txt
+      - name: Generate SHA-256 checksums (Linux)
+        if: runner.os == 'Linux'
         shell: bash
-        run: |
-          if [[ "$RUNNER_OS" == Windows ]]; then
-            Get-ChildItem -Recurse src-tauri/target/release/bundle -File | ForEach-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash + '  ' + $_.Name } | Set-Content SHA256SUMS.txt
-          else
-            find src-tauri/target/release/bundle -type f -print0 | xargs -0 sha256sum > SHA256SUMS.txt
-          fi
+        run: find src-tauri/target/release/bundle -type f -print0 | xargs -0 sha256sum > SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.target }}
@@ -58,4 +63,7 @@ jobs:
         with: { path: release-artifacts }
       - name: Publish GitHub Release
         env: { GH_TOKEN: '${{ github.token }}', TAG: '${{ github.ref_name }}' }
-        run: gh release create "$TAG" release-artifacts/**/* --generate-notes --verify-tag
+        run: |
+          mapfile -t assets < <(find release-artifacts -type f -print)
+          test "${#assets[@]}" -gt 0
+          gh release create "$TAG" "${assets[@]}" --generate-notes --verify-tag
