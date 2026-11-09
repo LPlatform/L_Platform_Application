@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible desktop issue
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary and reproduction steps
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 10/11
+        - Ubuntu
+        - Debian
+        - Other
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public repository safety
+      options:
+        - label: This report contains no credentials or private backend information
+          required: true

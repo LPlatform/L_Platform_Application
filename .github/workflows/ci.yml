@@ -1,0 +1,27 @@
+name: Desktop CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 24 }
+      - name: Validate repository policy
+        run: node -e "for (const f of ['AGENTS.md','CONTRIBUTING.md','SECURITY.md','README.md','CHANGELOG.md','docs/repository-audit.md']) require('node:fs').accessSync(f)"
+      - name: Report product check readiness
+        run: |
+          if [[ ! -f package.json || ! -f pnpm-lock.yaml || ! -f Cargo.toml ]]; then
+            echo '::notice::pnpm lockfile and Cargo workspace are not configured; product tests and production build are unavailable.'
+            echo 'Product checks: NOT CONFIGURED (foundation only).' >> "$GITHUB_STEP_SUMMARY"
+          fi

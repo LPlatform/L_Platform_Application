@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+src-tauri/target/
+target/
+.env
+.env.*
+!.env.example
+*.log
+*.msi
+*.exe
+*.AppImage
+*.deb
+*.rpm
