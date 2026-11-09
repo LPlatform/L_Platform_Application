@@ -19,6 +19,8 @@ jobs:
         with: { node-version: 24 }
       - name: Validate repository policy
         run: node -e "for (const f of ['AGENTS.md','CONTRIBUTING.md','SECURITY.md','README.md','CHANGELOG.md','docs/repository-audit.md']) require('node:fs').accessSync(f)"
+      - name: Run foundation smoke tests
+        run: node --test tests/foundation.test.mjs
       - name: Report product check readiness
         run: |
           if [[ ! -f package.json || ! -f pnpm-lock.yaml || ! -f Cargo.toml ]]; then
