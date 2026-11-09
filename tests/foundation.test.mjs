@@ -29,6 +29,10 @@ test('desktop and Rust product jobs are skipped instead of passing when absent',
   assert.match(read('.github/workflows/ci.yml'), /name: bootstrap-smoke/);
   assert.match(read('.github/workflows/desktop-build.yml'), /if: needs\.readiness\.outputs\.product-configured == 'true'/);
   assert.match(read('.github/workflows/rust.yml'), /if: needs\.readiness\.outputs\.workspace-configured == 'true'/);
+  assert.match(read('.github/workflows/desktop-build.yml'), /windows-build:/);
+  assert.match(read('.github/workflows/desktop-build.yml'), /linux-build:/);
+  assert.match(read('.github/workflows/rust.yml'), /rust-windows:/);
+  assert.match(read('.github/workflows/rust.yml'), /rust-linux:/);
   assert.match(read('.github/workflows/release.yml'), /No MSI or NSIS installer was produced/);
   assert.match(read('.github/workflows/release.yml'), /No Debian package or AppImage was produced/);
   assert.match(read('.github/workflows/release.yml'), /existing release/i);
