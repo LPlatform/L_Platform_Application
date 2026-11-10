@@ -5,7 +5,13 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('public desktop repository excludes confidential implementation and secrets', () => {
-  for (const path of ['AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md', 'docs/release-process.md', 'docs/integration/api-contracts.md']) {
+  for (const path of [
+    'AGENTS.md',
+    'CONTRIBUTING.md',
+    'SECURITY.md',
+    'docs/release-process.md',
+    'docs/integration/api-contracts.md',
+  ]) {
     assert.ok(existsSync(new URL(`../${path}`, import.meta.url)), `${path} exists`);
   }
   assert.match(read('README.md'), /public repository/i);
@@ -27,8 +33,14 @@ test('workflow actions use full commit SHAs', () => {
 
 test('desktop and Rust product jobs are skipped instead of passing when absent', () => {
   assert.match(read('.github/workflows/ci.yml'), /name: bootstrap-smoke/);
-  assert.match(read('.github/workflows/desktop-build.yml'), /if: needs\.readiness\.outputs\.product-configured == 'true'/);
-  assert.match(read('.github/workflows/rust.yml'), /if: needs\.readiness\.outputs\.workspace-configured == 'true'/);
+  assert.match(
+    read('.github/workflows/desktop-build.yml'),
+    /if: needs\.readiness\.outputs\.product-configured == 'true'/,
+  );
+  assert.match(
+    read('.github/workflows/rust.yml'),
+    /if: needs\.readiness\.outputs\.workspace-configured == 'true'/,
+  );
   assert.match(read('.github/workflows/desktop-build.yml'), /windows-build:/);
   assert.match(read('.github/workflows/desktop-build.yml'), /linux-build:/);
   assert.match(read('.github/workflows/rust.yml'), /rust-windows:/);
