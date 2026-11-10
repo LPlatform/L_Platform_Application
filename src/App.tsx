@@ -83,7 +83,7 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    clearAuthTokens();
+    void clearAuthTokens();
     setUser(null);
     setCurrentView('dashboard');
     setSelectedAssignment(null);

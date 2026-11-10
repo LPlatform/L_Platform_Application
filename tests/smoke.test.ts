@@ -5,3 +5,4 @@ describe('Desktop Application Suite', () => {
     expect(true).toBe(true);
   });
 });
+

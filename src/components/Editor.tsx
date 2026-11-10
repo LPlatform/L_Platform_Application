@@ -109,7 +109,7 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
         language,
         sourceCode: code,
       });
-      setFeedbackMsg('Offline: submission saved to sync queue. Will execute when connected.');
+      setFeedbackMsg('Offline: submission saved to sync queue. It will be sent when connected and remain pending until a secure execution worker is available.');
       setSubmitting(false);
       return;
     }
@@ -124,7 +124,11 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
       setCurrentSubmission(result);
       setActiveTab('results');
       loadSubmissions();
-      setFeedbackMsg('Submission evaluated successfully.');
+      setFeedbackMsg(
+        result.status === 'PENDING'
+          ? 'Submission saved. Status: pending; secure code execution is not enabled yet.'
+          : `Submission status: ${result.status}.`,
+      );
     } catch (err: unknown) {
       setFeedbackMsg(err instanceof Error ? err.message : 'Evaluation submission failed');
     } finally {
@@ -158,7 +162,7 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
             className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
             onClick={() => setActiveTab('results')}
           >
-            Execution Results {currentSubmission ? `(${currentSubmission.score ?? 0}%)` : ''}
+            Submission Status {currentSubmission ? `(${currentSubmission.status})` : ''}
           </button>
           <button
             className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
@@ -221,7 +225,7 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
                     </div>
                     <div className="summary-item">
                       <span>Score:</span>
-                      <strong>{currentSubmission.score ?? 0} / 100</strong>
+                      <strong>{currentSubmission.score == null ? 'Pending' : `${currentSubmission.score} / 100`}</strong>
                     </div>
                     <div className="summary-item">
                       <span>Language:</span>
@@ -267,7 +271,7 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
                 </div>
               ) : (
                 <p className="empty-results">
-                  Click &apos;Run &amp; Submit Code&apos; to evaluate your solution.
+                  Submit code to store it. Evaluation stays pending until a secure execution worker is available.
                 </p>
               )}
             </div>
@@ -356,7 +360,7 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
               onClick={handleSubmit}
               disabled={submitting}
             >
-              {submitting ? 'Evaluating...' : 'Run & Submit Solution →'}
+              {submitting ? 'Saving...' : 'Submit Solution →'}
             </button>
           </div>
         </div>

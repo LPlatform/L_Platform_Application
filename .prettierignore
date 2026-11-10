@@ -4,3 +4,4 @@ target
 src-tauri/target
 pnpm-lock.yaml
 *.log
+

@@ -68,3 +68,4 @@ export interface Draft {
   updatedAt: number;
   synced: boolean;
 }
+
