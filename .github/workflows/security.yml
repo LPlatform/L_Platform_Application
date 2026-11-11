@@ -53,3 +53,13 @@ jobs:
           languages: ${{ needs.source-readiness.outputs.languages }}
           build-mode: none
       - uses: github/codeql-action/analyze@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
+        with:
+          output: ${{ runner.temp }}/codeql-results
+          upload: never
+      - name: Retain CodeQL SARIF results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-sarif-${{ github.sha }}
+          path: ${{ runner.temp }}/codeql-results
+          if-no-files-found: error
+          retention-days: 14

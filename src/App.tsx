@@ -1,48 +1,77 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  BarChart3,
+  BookOpen,
+  ClipboardCheck,
+  Code2,
+  GraduationCap,
+  HelpCircle,
+  Home,
+  Library,
+  School,
+  Settings,
+  TrendingUp,
+} from 'lucide-react';
 import type { User, Assignment, Question } from './types';
 import { getStoredUser, clearAuthTokens, submitSolution } from './lib/api';
 import { getQueuedSubmissions, clearQueuedSubmission } from './lib/storage';
 import { Navbar } from './components/Navbar';
 import { Login } from './components/Login';
-import { Dashboard } from './components/Dashboard';
+import { Dashboard, type StudentSection } from './components/Dashboard';
 import { Editor } from './components/Editor';
+
+const primaryNav: Array<{
+  id: StudentSection;
+  label: string;
+  Icon: React.ComponentType<{ size?: number }>;
+}> = [
+  { id: 'overview', label: 'Overview', Icon: Home },
+  { id: 'classes', label: 'My Classes', Icon: School },
+  { id: 'learning', label: 'My Learning', Icon: BookOpen },
+  { id: 'assessments', label: 'Assessments', Icon: ClipboardCheck },
+  { id: 'assignments', label: 'Assignments', Icon: Code2 },
+  { id: 'results', label: 'Results', Icon: BarChart3 },
+  { id: 'progress', label: 'Progress', Icon: TrendingUp },
+];
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'editor'>('dashboard');
+  const [currentView, setCurrentView] = useState<StudentSection | 'editor'>('overview');
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
-  const [queuedCount, setQueuedCount] = useState<number>(0);
+  const [queuedCount, setQueuedCount] = useState(0);
 
-  // Check stored user session
   useEffect(() => {
-    getStoredUser().then((stored) => {
-      if (stored) {
-        setUser(stored);
-      }
-      setLoading(false);
-    });
+    getStoredUser()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Update queued submissions count
-  const updateQueueCount = useCallback(() => {
-    const queue = getQueuedSubmissions();
-    setQueuedCount(queue.length);
+  useEffect(() => {
+    const handleExpired = () => {
+      setUser(null);
+      setCurrentView('overview');
+      setSelectedAssignment(null);
+      setSelectedQuestion(null);
+    };
+    window.addEventListener('lp-auth-expired', handleExpired);
+    return () => window.removeEventListener('lp-auth-expired', handleExpired);
   }, []);
+
+  const updateQueueCount = useCallback(() => setQueuedCount(getQueuedSubmissions().length), []);
 
   useEffect(() => {
     updateQueueCount();
+    window.addEventListener('lp-queue-updated', updateQueueCount);
+    return () => window.removeEventListener('lp-queue-updated', updateQueueCount);
   }, [updateQueueCount]);
 
-  // Sync queued submissions when reconnected
   const syncQueuedSubmissions = useCallback(async () => {
     if (!navigator.onLine) return;
-    const queue = getQueuedSubmissions();
-    if (queue.length === 0) return;
-
-    for (const item of queue) {
+    for (const item of getQueuedSubmissions()) {
       try {
         await submitSolution({
           assignmentId: item.assignmentId,
@@ -52,89 +81,180 @@ export const App: React.FC = () => {
         });
         clearQueuedSubmission(item.id);
       } catch {
-        // If error, leave in queue to retry next time
+        break;
       }
     }
     updateQueueCount();
   }, [updateQueueCount]);
 
-  // Monitor network online/offline events
   useEffect(() => {
-    const handleOnline = () => {
+    const online = () => {
       setIsOnline(true);
-      syncQueuedSubmissions();
+      void syncQueuedSubmissions();
     };
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
     };
   }, [syncQueuedSubmissions]);
 
-  const handleLoginSuccess = (authenticatedUser: User) => {
-    setUser(authenticatedUser);
-    setCurrentView('dashboard');
-  };
-
-  const handleLogout = () => {
-    void clearAuthTokens();
-    setUser(null);
-    setCurrentView('dashboard');
+  function goTo(section: StudentSection) {
+    setCurrentView(section);
     setSelectedAssignment(null);
     setSelectedQuestion(null);
-  };
+  }
 
-  const handleSelectAssignment = (assignment: Assignment, question: Question) => {
+  function logout() {
+    void clearAuthTokens();
+    setUser(null);
+    setCurrentView('overview');
+    setSelectedAssignment(null);
+    setSelectedQuestion(null);
+  }
+
+  function selectAssignment(assignment: Assignment, question: Question) {
     setSelectedAssignment(assignment);
     setSelectedQuestion(question);
     setCurrentView('editor');
-  };
-
-  const handleNavigateDashboard = () => {
-    setCurrentView('dashboard');
-    setSelectedAssignment(null);
-    setSelectedQuestion(null);
-  };
+  }
 
   if (loading) {
-    return <div className="loading-screen">Initializing Workspace...</div>;
+    return (
+      <div className="loading-screen">
+        <span className="brand-mark">LP</span>
+        <p>Opening Student Workspace…</p>
+      </div>
+    );
   }
 
   if (!user) {
-    return <Login onSuccess={handleLoginSuccess} />;
+    return (
+      <Login
+        onSuccess={(authenticatedUser) => {
+          setUser(authenticatedUser);
+          goTo('overview');
+        }}
+      />
+    );
   }
 
+  const section: StudentSection = currentView === 'editor' ? 'assignments' : currentView;
+
   return (
-    <div className="app-container">
-      <Navbar
-        user={user}
-        onLogout={handleLogout}
-        isOnline={isOnline}
-        queuedCount={queuedCount}
-        onSync={syncQueuedSubmissions}
-        currentView={currentView}
-        onNavigateDashboard={handleNavigateDashboard}
-      />
+    <div className="desktop-shell">
+      {currentView !== 'editor' && (
+        <aside className="sidebar-nav" aria-label="Student Workspace navigation">
+          <div className="sidebar-brand">
+            <div className="sidebar-brand-mark">LP</div>
+            <div>
+              <strong>L_Platform</strong>
+              <span>Student Workspace</span>
+            </div>
+          </div>
 
-      {currentView === 'dashboard' && (
-        <Dashboard onSelectAssignment={handleSelectAssignment} isOnline={isOnline} />
+          <span className="sidebar-section-label">Workspace</span>
+          <nav className="sidebar-menu">
+            {primaryNav.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                className={`sidebar-item ${currentView === id ? 'active' : ''}`}
+                aria-current={currentView === id ? 'page' : undefined}
+                onClick={() => goTo(id)}
+              >
+                <span className="sidebar-item-left">
+                  <Icon size={16} />
+                  <span>{label}</span>
+                </span>
+              </button>
+            ))}
+          </nav>
+
+          <button
+            type="button"
+            className={`sidebar-library-callout ${currentView === 'library' ? 'active' : ''}`}
+            onClick={() => goTo('library')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Library size={15} style={{ color: '#c4b5fd' }} />
+              <strong>Learning Library</strong>
+            </div>
+            <span>Browse free platform courses &amp; school modules</span>
+          </button>
+
+          <div className="sidebar-footer">
+            <button
+              type="button"
+              className={`sidebar-item ${currentView === 'settings' ? 'active' : ''}`}
+              onClick={() => goTo('settings')}
+            >
+              <span className="sidebar-item-left">
+                <Settings size={16} />
+                <span>Settings</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`sidebar-item ${currentView === 'help' ? 'active' : ''}`}
+              onClick={() => goTo('help')}
+            >
+              <span className="sidebar-item-left">
+                <HelpCircle size={16} />
+                <span>Help &amp; Support</span>
+              </span>
+            </button>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px 2px',
+                fontSize: 11,
+                color: '#64748b',
+              }}
+            >
+              <GraduationCap size={13} />
+              <span>{user.role.replaceAll('_', ' ')}</span>
+            </div>
+          </div>
+        </aside>
       )}
 
-      {currentView === 'editor' && selectedAssignment && selectedQuestion && (
-        <Editor
-          assignment={selectedAssignment}
-          question={selectedQuestion}
+      <div className="main-column">
+        <Navbar
+          user={user}
+          onLogout={logout}
           isOnline={isOnline}
-          onBack={handleNavigateDashboard}
+          queuedCount={queuedCount}
+          onSync={syncQueuedSubmissions}
+          currentView={currentView}
+          onNavigateDashboard={() => goTo('assignments')}
+          onOpenSettings={() => goTo('settings')}
         />
-      )}
+
+        {currentView === 'editor' && selectedAssignment && selectedQuestion ? (
+          <Editor
+            assignment={selectedAssignment}
+            question={selectedQuestion}
+            isOnline={isOnline}
+            onBack={() => goTo('assignments')}
+          />
+        ) : (
+          <Dashboard
+            user={user}
+            section={section}
+            onNavigate={goTo}
+            onSelectAssignment={selectAssignment}
+            isOnline={isOnline}
+            onSync={syncQueuedSubmissions}
+          />
+        )}
+      </div>
     </div>
   );
 };
+
 export default App;

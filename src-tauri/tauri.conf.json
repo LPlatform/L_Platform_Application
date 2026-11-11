@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "l-platform-student",
+  "productName": "L_Platform Student",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.lplatform.student",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,14 +13,16 @@
     "windows": [
       {
         "title": "L-Platform Student Workspace",
-        "width": 800,
-        "height": 600,
+        "width": 1440,
+        "height": 920,
+        "minWidth": 800,
+        "minHeight": 600,
         "resizable": true,
         "fullscreen": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost http://localhost:3001 http://127.0.0.1:3001 https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },
   "bundle": {

@@ -9,25 +9,23 @@ concurrency:
   group: dependency-review-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  readiness:
-    runs-on: ubuntu-latest
-    outputs:
-      dependencies-configured: ${{ steps.dependencies.outputs.configured }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - id: dependencies
-        shell: bash
-        run: |
-          if [[ -f pnpm-lock.yaml || -f package-lock.json || -f Cargo.lock ]]; then
-            echo 'configured=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'configured=false' >> "$GITHUB_OUTPUT"
-            echo 'Dependency review: SKIPPED (no lockfiles).' >> "$GITHUB_STEP_SUMMARY"
-          fi
-  dependency-review:
-    needs: readiness
-    if: needs.readiness.outputs.dependencies-configured == 'true'
+  dependency-audit:
+    name: Lockfile dependency audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/dependency-review-action@595b5aeba73380359d98a5e087f648dbb0edce1b # v4.7.3
+      - uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+        with:
+          version: 12.18.0
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Audit JavaScript lockfile
+        run: pnpm audit --audit-level high
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Audit Rust lockfile
+        run: cargo install cargo-audit --locked && cargo audit

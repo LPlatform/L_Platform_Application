@@ -1,5 +1,21 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import type { User, Assignment, Question, Submission } from '../types';
+import type {
+  AssessmentAttemptDetail,
+  AssessmentResultRecord,
+  Assignment,
+  CatalogCourse,
+  CourseAssessment,
+  CourseAssessmentQuestion,
+  JoinClassResult,
+  LearningCourse,
+  LessonProgressSnapshot,
+  Question,
+  StudentClass,
+  Submission,
+  User,
+} from '../types';
+
+export type { CourseAssessment, CourseAssessmentQuestion } from '../types';
 
 const API_URL_KEY = 'lp_backend_url';
 const USER_KEY = 'lp_user';
@@ -9,6 +25,7 @@ let apiBaseUrl = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
 let authToken = '';
 let refreshToken = '';
 let credentialsLoaded: Promise<void> | null = null;
+let sessionRefresh: Promise<StoredAuth> | null = null;
 
 interface StoredAuth {
   accessToken: string;
@@ -38,16 +55,60 @@ async function storeSecureCredentials(): Promise<void> {
   await invoke('store_auth_session', { session: JSON.stringify(session) });
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function renewSession(): Promise<void> {
+  if (!refreshToken) throw new Error('Your session expired. Please sign in again.');
+  if (!sessionRefresh) {
+    sessionRefresh = fetch(`${apiBaseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ refreshToken }),
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Your session expired. Please sign in again.');
+        return (await response.json()) as StoredAuth;
+      })
+      .finally(() => {
+        sessionRefresh = null;
+      });
+  }
+  const tokens = await sessionRefresh;
+  authToken = tokens.accessToken;
+  refreshToken = tokens.refreshToken;
+  await storeSecureCredentials();
+}
+
+async function request<T>(path: string, init: RequestInit = {}, allowRefresh = true): Promise<T> {
   await loadSecureCredentials();
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
   if (authToken) headers.set('Authorization', `Bearer ${authToken}`);
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  let response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers,
     credentials: 'include',
   });
+  if (response.status === 401 && allowRefresh && refreshToken && path !== '/api/auth/refresh') {
+    try {
+      await renewSession();
+      const retryHeaders = new Headers(init.headers);
+      retryHeaders.set('Content-Type', 'application/json');
+      retryHeaders.set('Authorization', `Bearer ${authToken}`);
+      response = await fetch(`${apiBaseUrl}${path}`, {
+        ...init,
+        headers: retryHeaders,
+        credentials: 'include',
+      });
+    } catch {
+      await clearAuthTokens();
+      window.dispatchEvent(new Event('lp-auth-expired'));
+      throw new Error('Your session expired. Please sign in again.');
+    }
+  }
+  if (response.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/refresh') {
+    await clearAuthTokens();
+    window.dispatchEvent(new Event('lp-auth-expired'));
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.message || payload.error || `Request failed (${response.status})`);
@@ -126,13 +187,108 @@ function normalizeAssignment(raw: any): Assignment {
 }
 
 export async function fetchAssignments(): Promise<Assignment[]> {
-  const list = await request<{ items?: any[] }>('/api/assignments');
+  const list = await request<{ items?: any[] }>('/api/assignments?page=1&pageSize=100');
   return Promise.all(
     (list.items ?? []).map(async (item) => {
       const detail = await request<any>(`/api/assignments/${encodeURIComponent(item.id)}`);
       return normalizeAssignment(detail);
     }),
   );
+}
+
+export function fetchAiReadinessCourse(): Promise<LearningCourse> {
+  return request<LearningCourse>('/api/learning/ai-readiness');
+}
+
+export async function fetchCoursesCatalog(): Promise<CatalogCourse[]> {
+  const result = await request<{ items?: CatalogCourse[] }>('/api/learning/courses');
+  return Array.isArray(result.items) ? result.items : [];
+}
+
+export async function fetchStudentClasses(): Promise<StudentClass[]> {
+  const result = await request<{ items?: StudentClass[] }>('/api/learning/classes');
+  return Array.isArray(result.items) ? result.items : [];
+}
+
+export function joinClassByCode(code: string): Promise<JoinClassResult> {
+  return request<JoinClassResult>('/api/learning/classes/join', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function fetchLessonProgress(
+  courseId = 'crs-ai-readiness-001',
+): Promise<LessonProgressSnapshot> {
+  return request<LessonProgressSnapshot>(
+    `/api/learning/lesson-progress?courseId=${encodeURIComponent(courseId)}`,
+  );
+}
+
+export function fetchAssessmentAttempt(attemptId: string): Promise<AssessmentAttemptDetail> {
+  return request<AssessmentAttemptDetail>(
+    `/api/learning/attempts/${encodeURIComponent(attemptId)}`,
+  );
+}
+
+export async function fetchStudentResults(): Promise<AssessmentResultRecord[]> {
+  const result = await request<{ items?: AssessmentResultRecord[] }>('/api/learning/results');
+  return Array.isArray(result.items) ? result.items : [];
+}
+
+export async function fetchCourseAssessments(): Promise<CourseAssessment[]> {
+  const result = await request<unknown>('/api/learning/assessments');
+  if (!Array.isArray(result))
+    throw new Error('Assessment service returned an unexpected response.');
+  return result as CourseAssessment[];
+}
+
+export function startCourseAssessment(
+  assignmentId: string,
+): Promise<{ attemptId: string; status?: string; questions?: CourseAssessmentQuestion[] }> {
+  return request<{ attemptId: string; status?: string; questions?: CourseAssessmentQuestion[] }>(
+    `/api/learning/assessments/${encodeURIComponent(assignmentId)}/attempts`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function saveCourseAssessmentAnswer(
+  attemptId: string,
+  questionId: string,
+  response: unknown,
+) {
+  return request<{ saved: boolean; gradingStatus: string }>(
+    `/api/learning/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(questionId)}`,
+    { method: 'PUT', body: JSON.stringify({ response }) },
+  );
+}
+
+export function submitCourseAssessment(attemptId: string) {
+  return request<{ status: string; score: number | null; totalMarks: number }>(
+    `/api/learning/attempts/${encodeURIComponent(attemptId)}/submit`,
+    { method: 'POST' },
+  );
+}
+
+export function completeCourseLesson(moduleId: string, lessonIndex: number) {
+  return request<{ completed: boolean; lessonTitle: string }>('/api/learning/progress/lessons', {
+    method: 'POST',
+    body: JSON.stringify({ moduleId, lessonIndex }),
+  });
+}
+
+export interface CourseProgress {
+  lessonsCompleted: number;
+  attempts: number;
+  pendingReview: number;
+  graded: number;
+  earnedMarks: number;
+}
+
+export function fetchCourseProgress(): Promise<CourseProgress> {
+  return request<CourseProgress>('/api/learning/progress');
 }
 
 export async function fetchQuestion(questionId: string): Promise<Question> {

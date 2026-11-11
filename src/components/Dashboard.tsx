@@ -1,120 +1,831 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { fetchAssignments } from '../lib/api';
-import type { Assignment, Question } from '../types';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Activity,
+  AlertCircle,
+  BookOpen,
+  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  Code2,
+  Compass,
+  FolderCode,
+  Globe,
+  Plus,
+  RefreshCw,
+  School,
+  Sparkles,
+  Users,
+} from 'lucide-react';
+import {
+  fetchAiReadinessCourse,
+  fetchAssignments,
+  fetchCourseAssessments,
+  fetchCourseProgress,
+  fetchCoursesCatalog,
+  fetchLessonProgress,
+  fetchStudentClasses,
+  fetchStudentResults,
+  fetchSubmissionsForAssignment,
+  type CourseProgress,
+} from '../lib/api';
+import {
+  cacheAiReadinessCourse,
+  cacheCompletedLessons,
+  cacheCoursesCatalog,
+  getCachedAiReadinessCourse,
+  getCachedCompletedLessons,
+  getCachedCoursesCatalog,
+  getDraft,
+  getLastOpenedLesson,
+} from '../lib/storage';
+import { getCourseCompletionPercent } from '../lib/student-workspace';
+import type {
+  AssessmentResultRecord,
+  Assignment,
+  CatalogCourse,
+  CourseAssessment,
+  LearningCourse,
+  Question,
+  StudentClass,
+  Submission,
+  User,
+} from '../types';
+import { AiReadinessReader } from './AiReadinessReader';
+import { JoinClassModal, LearningLibraryView, MyClassesView } from './ClassesAndLibrary';
+import { CourseAssessments } from './CourseAssessments';
+import { ProgressView, ResultsView, SettingsAndHelpView } from './ResultsAndProgress';
+
+export type StudentSection =
+  | 'overview'
+  | 'classes'
+  | 'learning'
+  | 'assessments'
+  | 'assignments'
+  | 'results'
+  | 'progress'
+  | 'library'
+  | 'settings'
+  | 'help';
 
 interface DashboardProps {
+  user: User;
+  section: StudentSection;
+  onNavigate: (section: StudentSection) => void;
   onSelectAssignment: (assignment: Assignment, question: Question) => void;
   isOnline: boolean;
+  onSync?: () => Promise<void> | void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onSelectAssignment, isOnline }) => {
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function getTimeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
-  const loadAssignments = useCallback(async () => {
-    if (!isOnline) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
+export const Dashboard: React.FC<DashboardProps> = ({
+  user,
+  section,
+  onNavigate,
+  onSelectAssignment,
+  isOnline,
+  onSync = () => Promise.resolve(),
+}) => {
+  const [course, setCourse] = useState<LearningCourse | null>(() => getCachedAiReadinessCourse());
+  const [catalog, setCatalog] = useState<CatalogCourse[]>(() => getCachedCoursesCatalog());
+  const [classes, setClasses] = useState<StudentClass[]>([]);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() =>
+    getCachedCompletedLessons(),
+  );
+  const [lessonTimeline, setLessonTimeline] = useState<
+    Array<{ lessonId: string; moduleId: string; completedAt: string }>
+  >([]);
+  const [progress, setProgress] = useState<CourseProgress | null>(null);
+  const [assessments, setAssessments] = useState<CourseAssessment[]>([]);
+  const [results, setResults] = useState<AssessmentResultRecord[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState('');
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [bannerMsg, setBannerMsg] = useState('');
+
+  const loadWorkspaceData = useCallback(async () => {
+    setSyncError('');
     try {
-      const data = await fetchAssignments();
-      setAssignments(data);
+      const [
+        courseRes,
+        catalogRes,
+        classesRes,
+        lessonProgRes,
+        progressRes,
+        assessmentsRes,
+        resultsRes,
+        assignmentsRes,
+      ] = await Promise.all([
+        fetchAiReadinessCourse().catch(() => getCachedAiReadinessCourse()),
+        fetchCoursesCatalog().catch(() => getCachedCoursesCatalog()),
+        fetchStudentClasses().catch(() => [] as StudentClass[]),
+        fetchLessonProgress('crs-ai-readiness-001').catch(() => null),
+        fetchCourseProgress().catch(() => null),
+        fetchCourseAssessments().catch(() => [] as CourseAssessment[]),
+        fetchStudentResults().catch(() => [] as AssessmentResultRecord[]),
+        fetchAssignments().catch(() => [] as Assignment[]),
+      ]);
+
+      if (courseRes) {
+        setCourse(courseRes);
+        cacheAiReadinessCourse(courseRes);
+      }
+      if (catalogRes && catalogRes.length > 0) {
+        setCatalog(catalogRes);
+        cacheCoursesCatalog(catalogRes);
+      } else if (catalogRes) {
+        setCatalog(catalogRes);
+      }
+      setClasses(classesRes);
+      if (lessonProgRes) {
+        setCompletedLessonIds(lessonProgRes.completedLessonIds);
+        setLessonTimeline(lessonProgRes.items ?? []);
+        cacheCompletedLessons(lessonProgRes.completedLessonIds);
+      }
+      if (progressRes) setProgress(progressRes);
+      setAssessments(assessmentsRes);
+      setResults(resultsRes);
+      setAssignments(assignmentsRes);
+
+      if (assignmentsRes.length > 0) {
+        const allSubs = await Promise.all(
+          assignmentsRes
+            .slice(0, 12)
+            .map((a) => fetchSubmissionsForAssignment(a.id).catch(() => [])),
+        );
+        setSubmissions(
+          allSubs
+            .flat()
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+        );
+      } else {
+        setSubmissions([]);
+      }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load assignments');
+      setSyncError(
+        err instanceof Error ? err.message : 'Unable to refresh workspace data from server.',
+      );
     } finally {
       setLoading(false);
     }
-  }, [isOnline]);
+  }, []);
 
   useEffect(() => {
-    loadAssignments();
-  }, [loadAssignments]);
+    void loadWorkspaceData();
+  }, [isOnline, loadWorkspaceData]);
+
+  const lastCursor = getLastOpenedLesson();
+  const continueModule = course?.modules[lastCursor.moduleIndex] ?? course?.modules[0];
+  const continueLesson =
+    continueModule?.lessons[lastCursor.lessonIndex] ?? continueModule?.lessons[0];
+
+  const completedSet = new Set(completedLessonIds);
+  const totalLessons = course ? course.modules.reduce((s, m) => s + m.lessons.length, 0) : 0;
+  const completedLessonsCount = course
+    ? course.modules.reduce(
+        (s, m) => s + m.lessons.filter((_, idx) => completedSet.has(`${m.id}:${idx}`)).length,
+        0,
+      )
+    : (progress?.lessonsCompleted ?? 0);
+  const completedModulesCount = course
+    ? course.modules.filter(
+        (m) =>
+          m.lessons.length > 0 && m.lessons.every((_, idx) => completedSet.has(`${m.id}:${idx}`)),
+      ).length
+    : 0;
+
+  const overallPercent =
+    totalLessons > 0 ? getCourseCompletionPercent(completedLessonsCount, totalLessons) : 0;
+  const ringRadius = 46;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringOffset = ringCircumference * (1 - overallPercent / 100);
+
+  const upcomingWork = [
+    ...assignments.map((a) => ({
+      id: `asg-${a.id}`,
+      kind: 'assignment' as const,
+      title: a.title,
+      meta: `${a.questions?.length ?? 0} problem(s)`,
+      dueDate: a.dueDate,
+      onOpen: () => onNavigate('assignments'),
+    })),
+    ...assessments.map((ass) => ({
+      id: `asm-${ass.id}`,
+      kind: 'assessment' as const,
+      title: ass.title,
+      meta: `${ass.totalMarks} marks`,
+      dueDate: ass.dueAt,
+      onOpen: () => onNavigate('assessments'),
+    })),
+  ].slice(0, 4);
+
+  const recentActivity = [
+    ...lessonTimeline.slice(0, 3).map((l) => ({
+      id: `les-${l.lessonId}-${l.completedAt}`,
+      title: `Completed lesson (${l.lessonId.replace(':', ' #')})`,
+      time: new Date(l.completedAt).toLocaleString(),
+      sortAt: new Date(l.completedAt).getTime(),
+      tone: 'success' as const,
+    })),
+    ...results.slice(0, 3).map((r) => ({
+      id: `res-${r.attemptId}`,
+      title:
+        r.status === 'RELEASED' && r.score !== null
+          ? `Released: ${r.title} — ${r.score}/${r.totalMarks}`
+          : `Attempt ${r.status.replaceAll('_', ' ')}: ${r.title}`,
+      time: new Date(r.submittedAt || r.startedAt).toLocaleString(),
+      sortAt: new Date(r.submittedAt || r.startedAt).getTime(),
+      tone: 'violet' as const,
+    })),
+    ...submissions.slice(0, 2).map((s) => ({
+      id: `sub-${s.id}`,
+      title: `Submitted ${s.language} solution (${s.status})`,
+      time: new Date(s.createdAt).toLocaleString(),
+      sortAt: new Date(s.createdAt).getTime(),
+      tone: 'info' as const,
+    })),
+  ]
+    .sort((a, b) => b.sortAt - a.sortAt)
+    .slice(0, 4);
+
+  const platformFeaturedCourses = catalog
+    .filter((c) => c.scopeType === 'PLATFORM_FREE')
+    .slice(0, 3);
 
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-header">
-        <div>
-          <h2>Your Assigned Work</h2>
-          <p className="subtitle">
-            Select a problem to open the student workspace, code, test, and submit.
-          </p>
-        </div>
-        <button
-          className="btn btn-secondary"
-          onClick={loadAssignments}
-          disabled={loading || !isOnline}
-        >
-          {loading ? 'Refreshing...' : 'Refresh Assignments'}
-        </button>
-      </div>
+    <div className="workspace-scroll">
+      <div className="workspace-container">
+        {bannerMsg && (
+          <div className="inline-banner success">
+            <span>{bannerMsg}</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBannerMsg('')}>
+              Dismiss
+            </button>
+          </div>
+        )}
 
-      {!isOnline && (
-        <div className="alert alert-warning">
-          You are currently in offline mode. Cached drafts can still be edited locally and will sync
-          when reconnected.
-        </div>
-      )}
+        {syncError && (
+          <div className="inline-banner warning">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={15} />
+              {syncError}
+            </span>
+          </div>
+        )}
 
-      {error && <div className="alert alert-error">{error}</div>}
+        {section === 'overview' && (
+          <>
+            {/* Top Greeting Row */}
+            <div className="section-header-row">
+              <div>
+                <span className="eyebrow">Student Dashboard</span>
+                <h1>
+                  {getTimeGreeting()}, {user.name}
+                </h1>
+                <p>Continue your learning, complete classwork, and track your progress.</p>
+              </div>
 
-      {loading ? (
-        <div className="loading-state">Loading your assignments...</div>
-      ) : assignments.length === 0 ? (
-        <div className="empty-state">
-          <h3>No assignments found</h3>
-          <p>You have no active assignments right now. Check back later or contact your teacher.</p>
-        </div>
-      ) : (
-        <div className="assignments-grid">
-          {assignments.map((assignment) => (
-            <div key={assignment.id} className="assignment-card">
-              <div className="card-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void loadWorkspaceData()}
+                >
+                  <RefreshCw size={13} />
+                  <span>{loading ? 'Refreshing…' : 'Sync Workspace'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={!isOnline}
+                  onClick={() => setJoinOpen(true)}
+                >
+                  <Plus size={14} />
+                  <span>Join a Class</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Hero Banner + Circular Progress Ring */}
+            <div className="overview-top-grid">
+              <section className="hero-learning-card">
                 <div>
-                  <span className="badge badge-published">{assignment.status}</span>
-                  <h3>{assignment.title}</h3>
-                </div>
-                {assignment.dueDate && (
-                  <span className="due-date">
-                    Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                  <span className="pill pill-violet">
+                    <Sparkles size={12} />
+                    Continue Learning
                   </span>
+                  <h2>{course?.title || 'AI Readiness Course'}</h2>
+                  <p className="hero-lesson-meta">
+                    {continueModule && continueLesson
+                      ? `Module ${lastCursor.moduleIndex + 1} · ${continueLesson.title} (${continueModule.title})`
+                      : '8 structured modules covering AI Foundations, Neural Networks, Computer Vision, NLP, LLMs, Prompt Engineering, and Ethics.'}
+                  </p>
+                </div>
+
+                <div className="hero-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => onNavigate('learning')}
+                  >
+                    <span>Continue Learning →</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => onNavigate('assessments')}
+                  >
+                    <span>View Assessments</span>
+                  </button>
+                </div>
+              </section>
+
+              <section className="progress-ring-card">
+                <div className="panel-card-header">
+                  <h3>Your Learning Progress</h3>
+                  <button type="button" className="link-btn" onClick={() => onNavigate('progress')}>
+                    <span>Details →</span>
+                  </button>
+                </div>
+
+                <div className="progress-ring-body">
+                  <div className="ring-wrap">
+                    <svg width="112" height="112" viewBox="0 0 112 112">
+                      <defs>
+                        <linearGradient id="lpRingGrad" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0%" stopColor="#10b981" />
+                          <stop offset="100%" stopColor="#3b82f6" />
+                        </linearGradient>
+                      </defs>
+                      <circle
+                        cx="56"
+                        cy="56"
+                        r={ringRadius}
+                        stroke="#1f2c47"
+                        strokeWidth="10"
+                        fill="transparent"
+                      />
+                      <circle
+                        cx="56"
+                        cy="56"
+                        r={ringRadius}
+                        stroke="url(#lpRingGrad)"
+                        strokeWidth="10"
+                        strokeLinecap="round"
+                        fill="transparent"
+                        strokeDasharray={ringCircumference}
+                        strokeDashoffset={ringOffset}
+                      />
+                    </svg>
+                    <div className="ring-center-label">
+                      <strong className="tabular-nums">{overallPercent}%</strong>
+                      <span>Completed</span>
+                    </div>
+                  </div>
+
+                  <div className="ring-metrics">
+                    <div className="ring-metric-row">
+                      <span>Modules Completed</span>
+                      <strong className="tabular-nums">
+                        {completedModulesCount} / {course?.modules.length ?? 8}
+                      </strong>
+                    </div>
+                    <div className="ring-metric-row">
+                      <span>Lessons Completed</span>
+                      <strong className="tabular-nums">
+                        {completedLessonsCount}
+                        {totalLessons > 0 ? ` / ${totalLessons}` : ''}
+                      </strong>
+                    </div>
+                    <div className="ring-metric-row">
+                      <span>Earned Marks</span>
+                      <strong className="tabular-nums">{progress?.earnedMarks ?? 0}</strong>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* 4 Quick Action Cards */}
+            <section className="quick-actions-grid" aria-label="Quick Actions">
+              <button type="button" className="quick-action-card" onClick={() => setJoinOpen(true)}>
+                <div className="quick-action-left">
+                  <div className="quick-action-icon violet">
+                    <School size={18} />
+                  </div>
+                  <div>
+                    <strong>Join a Class</strong>
+                    <span>Enter class code or link</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} style={{ color: '#64748b' }} />
+              </button>
+
+              <button
+                type="button"
+                className="quick-action-card"
+                onClick={() => onNavigate('library')}
+              >
+                <div className="quick-action-left">
+                  <div className="quick-action-icon blue">
+                    <Compass size={18} />
+                  </div>
+                  <div>
+                    <strong>Explore Courses</strong>
+                    <span>Platform free &amp; school courses</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} style={{ color: '#64748b' }} />
+              </button>
+
+              <button
+                type="button"
+                className="quick-action-card"
+                onClick={() => onNavigate('assignments')}
+              >
+                <div className="quick-action-left">
+                  <div className="quick-action-icon emerald">
+                    <Code2 size={18} />
+                  </div>
+                  <div>
+                    <strong>My Assignments</strong>
+                    <span>{assignments.length} coding assignment(s)</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} style={{ color: '#64748b' }} />
+              </button>
+
+              <button
+                type="button"
+                className="quick-action-card"
+                onClick={() => onNavigate('assessments')}
+              >
+                <div className="quick-action-left">
+                  <div className="quick-action-icon amber">
+                    <ClipboardCheck size={18} />
+                  </div>
+                  <div>
+                    <strong>Take an Assessment</strong>
+                    <span>{assessments.length} published quiz(zes)</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} style={{ color: '#64748b' }} />
+              </button>
+            </section>
+
+            {/* 3-Column Overview Panels */}
+            <section className="overview-mid-grid">
+              {/* My Classes */}
+              <div className="panel-card">
+                <div className="panel-card-header">
+                  <h3>
+                    <Users size={16} style={{ color: '#60a5fa' }} />
+                    <span>My Classes</span>
+                  </h3>
+                  <button type="button" className="link-btn" onClick={() => onNavigate('classes')}>
+                    View All →
+                  </button>
+                </div>
+
+                {classes.length === 0 ? (
+                  <p className="muted-text">
+                    No classes joined yet. Use &ldquo;Join a Class&rdquo; to enroll with an invite
+                    code.
+                  </p>
+                ) : (
+                  classes.slice(0, 3).map((cls) => (
+                    <button
+                      type="button"
+                      key={cls.id}
+                      className="panel-item-row clickable"
+                      onClick={() => onNavigate('classes')}
+                      style={{ textAlign: 'left', width: '100%' }}
+                    >
+                      <div className="panel-item-meta">
+                        <strong>
+                          {cls.className} — {cls.sectionName}
+                        </strong>
+                        <span>
+                          {cls.studentCount} students · {cls.teachers.length} teacher(s)
+                        </span>
+                      </div>
+                      <ChevronRight size={15} style={{ color: '#64748b' }} />
+                    </button>
+                  ))
                 )}
               </div>
 
-              {assignment.description && (
-                <p className="assignment-desc">{assignment.description}</p>
-              )}
-
-              <div className="questions-section">
-                <h4>Questions ({assignment.questions?.length || 0}):</h4>
-                <div className="question-list">
-                  {assignment.questions && assignment.questions.length > 0 ? (
-                    assignment.questions.map((q, idx) => (
-                      <div key={q.id} className="question-row">
-                        <div className="q-info">
-                          <span className="q-number">#{idx + 1}</span>
-                          <span className="q-title">{q.title}</span>
-                          <span className="q-points">({q.points} pts)</span>
-                        </div>
-                        <button
-                          className="btn btn-primary-sm"
-                          onClick={() => onSelectAssignment(assignment, q)}
-                        >
-                          Open Workspace →
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="no-questions">No problems attached to this assignment.</p>
-                  )}
+              {/* Upcoming Work */}
+              <div className="panel-card">
+                <div className="panel-card-header">
+                  <h3>
+                    <CalendarClock size={16} style={{ color: '#a78bfa' }} />
+                    <span>Upcoming Work</span>
+                  </h3>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => onNavigate('assignments')}
+                  >
+                    View All →
+                  </button>
                 </div>
+
+                {upcomingWork.length === 0 ? (
+                  <p className="muted-text">No active assignments or assessments assigned yet.</p>
+                ) : (
+                  upcomingWork.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className="panel-item-row clickable"
+                      onClick={item.onOpen}
+                      style={{ textAlign: 'left', width: '100%' }}
+                    >
+                      <div className="panel-item-meta">
+                        <strong>{item.title}</strong>
+                        <span>
+                          {item.kind === 'assignment' ? 'Coding Assignment' : 'Assessment'} ·{' '}
+                          {item.meta}
+                        </span>
+                      </div>
+                      <span className="pill">
+                        {item.dueDate ? new Date(item.dueDate).toLocaleDateString() : 'Open'}
+                      </span>
+                    </button>
+                  ))
+                )}
               </div>
+
+              {/* Recent Activity */}
+              <div className="panel-card">
+                <div className="panel-card-header">
+                  <h3>
+                    <Activity size={16} style={{ color: '#34d399' }} />
+                    <span>Recent Activity</span>
+                  </h3>
+                  <button type="button" className="link-btn" onClick={() => onNavigate('results')}>
+                    View All →
+                  </button>
+                </div>
+
+                {recentActivity.length === 0 ? (
+                  <p className="muted-text">
+                    No activity recorded yet. Complete a lesson or attempt an assessment to start.
+                  </p>
+                ) : (
+                  recentActivity.map((act) => (
+                    <div className="panel-item-row" key={act.id}>
+                      <div className="panel-item-meta">
+                        <strong>{act.title}</strong>
+                        <span>{act.time}</span>
+                      </div>
+                      <CheckCircle2
+                        size={15}
+                        style={{
+                          color: act.tone === 'success' ? '#34d399' : '#a78bfa',
+                          flexShrink: 0,
+                        }}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            {/* Explore Platform Courses */}
+            <section className="panel-card">
+              <div className="panel-card-header">
+                <div>
+                  <h3>
+                    <BookOpen size={16} style={{ color: '#c4b5fd' }} />
+                    <span>Explore Platform Courses</span>
+                  </h3>
+                  <p className="muted-text" style={{ fontSize: 12.5, marginTop: 2 }}>
+                    Free platform-wide courses available across L_Platform alongside your school
+                    curriculum.
+                  </p>
+                </div>
+                <button type="button" className="link-btn" onClick={() => onNavigate('library')}>
+                  View Library →
+                </button>
+              </div>
+
+              {platformFeaturedCourses.length === 0 ? (
+                <p className="muted-text">No published platform-wide courses available yet.</p>
+              ) : (
+                <div className="cards-grid-3">
+                  {platformFeaturedCourses.map((c) => (
+                    <div className="reader-box" key={c.id} style={{ padding: 14 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <strong style={{ fontSize: 14 }}>{c.title}</strong>
+                        <span className="pill pill-free">
+                          <Globe size={11} />
+                          Free
+                        </span>
+                      </div>
+                      <p className="muted-text" style={{ fontSize: 12.5, lineHeight: 1.45 }}>
+                        {c.description || `${c.category} · ${c.language}`}
+                      </p>
+                      <div style={{ marginTop: 10 }}>
+                        {c.hasInteractiveReader ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => onNavigate('learning')}
+                          >
+                            Open Reader →
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => onNavigate('library')}
+                          >
+                            View in Library
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {section === 'classes' && (
+          <MyClassesView
+            classes={classes}
+            isOnline={isOnline}
+            onRefresh={() => void loadWorkspaceData()}
+            onOpenJoinModal={() => setJoinOpen(true)}
+            onOpenCourseReader={() => onNavigate('learning')}
+          />
+        )}
+
+        {section === 'library' && (
+          <LearningLibraryView courses={catalog} onOpenReader={() => onNavigate('learning')} />
+        )}
+
+        {section === 'learning' && (
+          <AiReadinessReader
+            isOnline={isOnline}
+            onProgressUpdated={() => void loadWorkspaceData()}
+            onOpenAssessments={() => onNavigate('assessments')}
+          />
+        )}
+
+        {section === 'assessments' && (
+          <CourseAssessments
+            isOnline={isOnline}
+            onAttemptChanged={() => void loadWorkspaceData()}
+            onOpenResults={() => onNavigate('results')}
+          />
+        )}
+
+        {section === 'assignments' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div className="section-header-row">
+              <div>
+                <span className="eyebrow">Practice &amp; Graded Tasks</span>
+                <h1>Coding Assignments</h1>
+                <p>
+                  Open any coding problem in the built-in IDE. Drafts save automatically on your
+                  device.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => void loadWorkspaceData()}
+              >
+                <RefreshCw size={13} />
+                <span>Refresh</span>
+              </button>
             </div>
-          ))}
-        </div>
-      )}
+
+            {assignments.length === 0 ? (
+              <div className="empty-card">
+                <div className="empty-card-icon">
+                  <FolderCode size={22} />
+                </div>
+                <h3>No published coding assignments yet</h3>
+                <p className="muted-text">
+                  When your teacher publishes programming tasks to your section, they will appear
+                  here.
+                </p>
+              </div>
+            ) : (
+              <div className="cards-grid-2">
+                {assignments.map((asg) => (
+                  <article className="panel-card" key={asg.id}>
+                    <div className="course-card-top">
+                      <div>
+                        <span className="pill pill-info">{asg.status}</span>
+                        <h3 style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{asg.title}</h3>
+                      </div>
+                      {asg.dueDate && (
+                        <span className="pill">
+                          Due {new Date(asg.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="muted-text" style={{ lineHeight: 1.55 }}>
+                      {asg.description || 'Complete the assigned programming questions.'}
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(asg.questions ?? []).length === 0 ? (
+                        <span className="muted-text" style={{ fontSize: 12.5 }}>
+                          No programming questions attached to this assignment yet.
+                        </span>
+                      ) : (
+                        (asg.questions ?? []).map((q, qIdx) => {
+                          const hasDraft = Boolean(getDraft(asg.id, q.id));
+                          return (
+                            <div className="panel-item-row" key={q.id}>
+                              <div className="panel-item-meta">
+                                <strong>
+                                  {qIdx + 1}. {q.title}
+                                </strong>
+                                <span>
+                                  {q.points} pts{hasDraft ? ' · Local Draft Saved' : ''}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => onSelectAssignment(asg, q)}
+                              >
+                                <Code2 size={13} />
+                                <span>Open IDE</span>
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'results' && (
+          <ResultsView
+            results={results}
+            submissions={submissions}
+            assignments={assignments}
+            onRefresh={() => void loadWorkspaceData()}
+          />
+        )}
+
+        {section === 'progress' && (
+          <ProgressView
+            course={course}
+            completedLessonIds={completedLessonIds}
+            results={results}
+            lessonsCompletedCount={progress?.lessonsCompleted ?? completedLessonsCount}
+            pendingReviewCount={progress?.pendingReview ?? 0}
+            gradedCount={progress?.graded ?? 0}
+            earnedMarks={progress?.earnedMarks ?? 0}
+            onOpenCourseReader={() => onNavigate('learning')}
+          />
+        )}
+
+        {(section === 'settings' || section === 'help') && (
+          <SettingsAndHelpView mode={section} isOnline={isOnline} onSync={onSync} />
+        )}
+      </div>
+
+      <JoinClassModal
+        open={joinOpen}
+        isOnline={isOnline}
+        onClose={() => setJoinOpen(false)}
+        onSuccess={(msg) => {
+          setBannerMsg(msg);
+          void loadWorkspaceData();
+        }}
+      />
     </div>
   );
 };
