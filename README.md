@@ -8,6 +8,10 @@ Planned stack: Tauri 2, React, TypeScript, Rust, Monaco, SQLite, Cargo workspace
 
 Use short lived branches (`feature/*`, `fix/*`, `refactor/*`, `chore/*`, `docs/*`, `security/*`), PRs to `main`, Conventional Commits and squash merges. See [repository audit](docs/repository-audit.md), [GitHub Actions](docs/github-actions.md) and [release process](docs/release-process.md). Do not commit secrets, `.env*` files or signing material.
 
-## Student workspace redesign update (2026-11-11)
+## Student workspace and assessment update (2026-11-12)
 
-See [the student workspace redesign report](docs/student-workspace-redesign.md) for current UI changes, API limitations, actual checks, installer SHA-256, unsigned status and runtime verification limits. All existing modifications were preserved; no commits or pushes were made. The native build passed, but authenticated screens and the requested viewport checks remain unverified because no sign-in was performed.
+The student workspace includes updated course and assignment views, assessment attempt navigation, answer persistence and submit handling, plus normalized API responses. Empty-body assessment start requests omit JSON headers; requests with answer payloads send JSON. Assessment and upload failures are surfaced to the student instead of being presented as empty data. The backend service is maintained outside this repository, so server-side behavior must be verified against its deployment and API contract.
+
+See [the student workspace redesign report](docs/student-workspace-redesign.md) for UI/API limitations and verification notes. The Windows x64 NSIS installer was built locally at `target/release/bundle/nsis/L_Platform Student_0.1.0_x64-setup.exe` (2,383,755 bytes; SHA-256 `BDDDE89FCC6DA77C0FCC93F6A93995ADD03496FAE55D24F3FAFD4112D83C6C96`). It is unsigned and is ignored by Git; the release workflow publishes installers when an authorized `app-vX.Y.Z` tag is pushed after required checks.
+
+Checks run for this update: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (10 tests), `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace --all-targets` (1 test), `pnpm build`, and `pnpm tauri build --bundles nsis`. All passed. Authenticated live-backend assessment flows were not exercised; see the report for known API limitations.

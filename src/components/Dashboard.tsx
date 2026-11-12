@@ -54,6 +54,7 @@ import type {
 import { AiReadinessReader } from './AiReadinessReader';
 import { JoinClassModal, LearningLibraryView, MyClassesView } from './ClassesAndLibrary';
 import { CourseAssessments } from './CourseAssessments';
+import { MultiTypeAssignmentWorkspace } from './MultiTypeAssignmentWorkspace';
 import { ProgressView, ResultsView, SettingsAndHelpView } from './ResultsAndProgress';
 
 export type StudentSection =
@@ -110,6 +111,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [syncError, setSyncError] = useState('');
   const [joinOpen, setJoinOpen] = useState(false);
   const [bannerMsg, setBannerMsg] = useState('');
+  const [focusAssessmentModuleId, setFocusAssessmentModuleId] = useState<string | null>(null);
+  const [activeMultiAssignment, setActiveMultiAssignment] = useState<{
+    assignment: Assignment;
+    questionId?: string;
+  } | null>(null);
 
   const loadWorkspaceData = useCallback(async () => {
     setSyncError('');
@@ -182,6 +188,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     void loadWorkspaceData();
   }, [isOnline, loadWorkspaceData]);
 
+  useEffect(() => {
+    if (section !== 'assignments') {
+      setActiveMultiAssignment(null);
+    }
+  }, [section]);
+
   const lastCursor = getLastOpenedLesson();
   const continueModule = course?.modules[lastCursor.moduleIndex] ?? course?.modules[0];
   const continueLesson =
@@ -212,6 +224,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     ...assignments.map((a) => ({
       id: `asg-${a.id}`,
       kind: 'assignment' as const,
+      typeLabel: a.assignmentType ? a.assignmentType.replaceAll('_', ' ') : 'Assignment',
       title: a.title,
       meta: `${a.questions?.length ?? 0} problem(s)`,
       dueDate: a.dueDate,
@@ -220,6 +233,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     ...assessments.map((ass) => ({
       id: `asm-${ass.id}`,
       kind: 'assessment' as const,
+      typeLabel: 'Assessment',
       title: ass.title,
       meta: `${ass.totalMarks} marks`,
       dueDate: ass.dueAt,
@@ -553,8 +567,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <div className="panel-item-meta">
                         <strong>{item.title}</strong>
                         <span>
-                          {item.kind === 'assignment' ? 'Coding Assignment' : 'Assessment'} ·{' '}
-                          {item.meta}
+                          {item.typeLabel} · {item.meta}
                         </span>
                       </div>
                       <span className="pill">
@@ -688,7 +701,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <AiReadinessReader
             isOnline={isOnline}
             onProgressUpdated={() => void loadWorkspaceData()}
-            onOpenAssessments={() => onNavigate('assessments')}
+            onOpenAssessments={(moduleId) => {
+              setFocusAssessmentModuleId(moduleId ?? null);
+              onNavigate('assessments');
+            }}
           />
         )}
 
@@ -697,97 +713,148 @@ export const Dashboard: React.FC<DashboardProps> = ({
             isOnline={isOnline}
             onAttemptChanged={() => void loadWorkspaceData()}
             onOpenResults={() => onNavigate('results')}
+            focusModuleId={focusAssessmentModuleId}
+            onClearFocusModule={() => setFocusAssessmentModuleId(null)}
           />
         )}
 
-        {section === 'assignments' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div className="section-header-row">
-              <div>
-                <span className="eyebrow">Practice &amp; Graded Tasks</span>
-                <h1>Coding Assignments</h1>
-                <p>
-                  Open any coding problem in the built-in IDE. Drafts save automatically on your
-                  device.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => void loadWorkspaceData()}
-              >
-                <RefreshCw size={13} />
-                <span>Refresh</span>
-              </button>
-            </div>
-
-            {assignments.length === 0 ? (
-              <div className="empty-card">
-                <div className="empty-card-icon">
-                  <FolderCode size={22} />
+        {section === 'assignments' && activeMultiAssignment ? (
+          <MultiTypeAssignmentWorkspace
+            assignment={
+              assignments.find((a) => a.id === activeMultiAssignment.assignment.id) ??
+              activeMultiAssignment.assignment
+            }
+            initialQuestionId={activeMultiAssignment.questionId}
+            isOnline={isOnline}
+            onBack={() => setActiveMultiAssignment(null)}
+            onSubmitted={() => void loadWorkspaceData()}
+          />
+        ) : (
+          section === 'assignments' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div className="section-header-row">
+                <div>
+                  <span className="eyebrow">Practice &amp; Graded Tasks</span>
+                  <h1>Course &amp; Class Assignments</h1>
+                  <p>
+                    Complete coding challenges in the IDE and submit conceptual, short-answer, case
+                    study, or practical tasks from your classes.
+                  </p>
                 </div>
-                <h3>No published coding assignments yet</h3>
-                <p className="muted-text">
-                  When your teacher publishes programming tasks to your section, they will appear
-                  here.
-                </p>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void loadWorkspaceData()}
+                >
+                  <RefreshCw size={13} />
+                  <span>Refresh</span>
+                </button>
               </div>
-            ) : (
-              <div className="cards-grid-2">
-                {assignments.map((asg) => (
-                  <article className="panel-card" key={asg.id}>
-                    <div className="course-card-top">
-                      <div>
-                        <span className="pill pill-info">{asg.status}</span>
-                        <h3 style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{asg.title}</h3>
-                      </div>
-                      {asg.dueDate && (
-                        <span className="pill">
-                          Due {new Date(asg.dueDate).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
 
-                    <p className="muted-text" style={{ lineHeight: 1.55 }}>
-                      {asg.description || 'Complete the assigned programming questions.'}
-                    </p>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {(asg.questions ?? []).length === 0 ? (
-                        <span className="muted-text" style={{ fontSize: 12.5 }}>
-                          No programming questions attached to this assignment yet.
-                        </span>
-                      ) : (
-                        (asg.questions ?? []).map((q, qIdx) => {
-                          const hasDraft = Boolean(getDraft(asg.id, q.id));
-                          return (
-                            <div className="panel-item-row" key={q.id}>
-                              <div className="panel-item-meta">
-                                <strong>
-                                  {qIdx + 1}. {q.title}
-                                </strong>
-                                <span>
-                                  {q.points} pts{hasDraft ? ' · Local Draft Saved' : ''}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-sm"
-                                onClick={() => onSelectAssignment(asg, q)}
-                              >
-                                <Code2 size={13} />
-                                <span>Open IDE</span>
-                              </button>
+              {assignments.length === 0 ? (
+                <div className="empty-card">
+                  <div className="empty-card-icon">
+                    <FolderCode size={22} />
+                  </div>
+                  <h3>No published assignments yet</h3>
+                  <p className="muted-text">
+                    When your teacher publishes tasks to your section, they will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="cards-grid-2">
+                  {assignments.map((asg) => {
+                    const typeLabel = (asg.assignmentType || 'PROGRAMMING').replaceAll('_', ' ');
+                    return (
+                      <article className="panel-card" key={asg.id}>
+                        <div className="course-card-top">
+                          <div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <span className="pill pill-info">{asg.status}</span>
+                              <span className="pill pill-violet">{typeLabel}</span>
                             </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
+                              {asg.title}
+                            </h3>
+                          </div>
+                          {asg.dueDate && (
+                            <span className="pill">
+                              Due {new Date(asg.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="muted-text" style={{ lineHeight: 1.55 }}>
+                          {asg.description || 'Complete the assigned questions.'}
+                        </p>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {(asg.questions ?? []).length === 0 ? (
+                            <span className="muted-text" style={{ fontSize: 12.5 }}>
+                              No questions attached to this assignment yet.
+                            </span>
+                          ) : (
+                            (asg.questions ?? []).map((q, qIdx) => {
+                              const isCodeQ = ['PROGRAMMING', 'CODE'].includes(
+                                (q.questionType ?? '').toUpperCase(),
+                              );
+                              const hasDraft = isCodeQ && Boolean(getDraft(asg.id, q.id));
+                              const latestSub = (asg.mySubmissions ?? []).find(
+                                (s) => s.questionId === q.id,
+                              );
+                              return (
+                                <div className="panel-item-row" key={q.id}>
+                                  <div className="panel-item-meta">
+                                    <strong>
+                                      {qIdx + 1}. {q.title}
+                                    </strong>
+                                    <span>
+                                      {q.points} pts ·{' '}
+                                      {(q.questionType ?? 'PROGRAMMING').replaceAll('_', ' ')}
+                                      {hasDraft ? ' · Local Draft Saved' : ''}
+                                      {latestSub
+                                        ? latestSub.feedbackReleasedAt && latestSub.score !== null
+                                          ? ` · Score ${latestSub.score}/${q.points}`
+                                          : ` · ${latestSub.status.replaceAll('_', ' ')}`
+                                        : ''}
+                                    </span>
+                                  </div>
+                                  {isCodeQ ? (
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary btn-sm"
+                                      onClick={() => onSelectAssignment(asg, q)}
+                                    >
+                                      <Code2 size={13} />
+                                      <span>Open IDE</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary btn-sm"
+                                      onClick={() =>
+                                        setActiveMultiAssignment({
+                                          assignment: asg,
+                                          questionId: q.id,
+                                        })
+                                      }
+                                    >
+                                      <ClipboardCheck size={13} />
+                                      <span>{latestSub ? 'View / Submit' : 'Open Task'}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )
         )}
 
         {section === 'results' && (

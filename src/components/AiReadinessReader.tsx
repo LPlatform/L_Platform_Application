@@ -26,7 +26,7 @@ import type { LearningCourse } from '../types';
 interface AiReadinessReaderProps {
   isOnline: boolean;
   onProgressUpdated?: () => void;
-  onOpenAssessments?: () => void;
+  onOpenAssessments?: (moduleId?: string) => void;
 }
 
 function sanitizeHandbookTitle(text: string): string {
@@ -177,19 +177,30 @@ export const AiReadinessReader: React.FC<AiReadinessReaderProps> = ({
           <span className="eyebrow">
             {sanitizeHandbookTitle(course.sourceTitle) || 'Interactive Course Reader'}
           </span>
-          <h1>{course.title}</h1>
-          <p>{course.description}</p>
+          <h1>{sanitizeHandbookTitle(course.title)}</h1>
+          <p>{sanitizeHandbookTitle(course.description)}</p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="pill tabular-nums">
+            {course.recommendedHours ?? 10} Hours ({course.estimatedMinutes ?? 600} min)
+          </span>
           <span className="pill pill-violet tabular-nums">
             <CheckCircle2 size={13} />
             {completedTotal} / {totalLessons} Lessons ({overallPercent}%)
           </span>
           {onOpenAssessments && (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenAssessments}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => onOpenAssessments(currentModule?.id)}
+            >
               <ListChecks size={14} />
-              <span>Course Assessments</span>
+              <span>
+                {currentModule
+                  ? `Take Module ${safeModuleIdx + 1} Assessment`
+                  : 'Course Assessments'}
+              </span>
             </button>
           )}
         </div>
@@ -237,10 +248,11 @@ export const AiReadinessReader: React.FC<AiReadinessReaderProps> = ({
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ color: '#e2e8f0', lineHeight: 1.35 }}>
-                      {mIdx + 1}. {mod.title}
+                      {mIdx + 1}. {sanitizeHandbookTitle(mod.title)}
                     </div>
                     <span className="muted-text" style={{ fontSize: 11, fontWeight: 500 }}>
                       {modDoneCount}/{mod.lessons.length} done · Pages {mod.sourcePages}
+                      {mod.estimatedMinutes ? ` · ${mod.estimatedMinutes}m` : ''}
                     </span>
                   </div>
                 </button>
@@ -290,13 +302,17 @@ export const AiReadinessReader: React.FC<AiReadinessReaderProps> = ({
               >
                 <div>
                   <span className="eyebrow">
-                    Module {safeModuleIdx + 1} · Handbook Pages {currentModule.sourcePages}
+                    Module {safeModuleIdx + 1} · Handbook Pages{' '}
+                    {currentLesson.sourcePages || currentModule.sourcePages}
+                    {currentLesson.estimatedMinutes
+                      ? ` · ${currentLesson.estimatedMinutes} min`
+                      : ''}
                   </span>
                   <h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>
-                    {currentLesson.title}
+                    {sanitizeHandbookTitle(currentLesson.title)}
                   </h2>
                   <p className="muted-text" style={{ marginTop: 2 }}>
-                    {currentModule.title}
+                    {sanitizeHandbookTitle(currentModule.title)}
                   </p>
                 </div>
 
@@ -353,8 +369,54 @@ export const AiReadinessReader: React.FC<AiReadinessReaderProps> = ({
                 </div>
               )}
 
+              {/* Lesson Learning Outcomes */}
+              {currentLesson.learningOutcomes && currentLesson.learningOutcomes.length > 0 && (
+                <div className="reader-box">
+                  <strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
+                    Lesson Learning Outcomes
+                  </strong>
+                  <ul
+                    style={{
+                      paddingLeft: 18,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      fontSize: 13,
+                      color: '#cbd5e1',
+                    }}
+                  >
+                    {currentLesson.learningOutcomes.map((item, idx) => (
+                      <li key={idx}>{sanitizeHandbookTitle(item)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Lesson Narrative */}
-              <div className="reader-prose">{currentLesson.content}</div>
+              <div className="reader-prose">{sanitizeHandbookTitle(currentLesson.content)}</div>
+
+              {/* Worked Examples */}
+              {currentLesson.examples && currentLesson.examples.length > 0 && (
+                <div className="reader-box">
+                  <strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
+                    Real-World Examples
+                  </strong>
+                  <ul
+                    style={{
+                      paddingLeft: 18,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      fontSize: 13,
+                      color: '#cbd5e1',
+                    }}
+                  >
+                    {currentLesson.examples.map((ex, idx) => (
+                      <li key={idx}>{sanitizeHandbookTitle(ex)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Guided Activity */}
               {currentLesson.activity && (
@@ -366,7 +428,45 @@ export const AiReadinessReader: React.FC<AiReadinessReaderProps> = ({
                     </strong>
                   </div>
                   <p className="reader-prose" style={{ fontSize: 13.5 }}>
-                    {currentLesson.activity}
+                    {sanitizeHandbookTitle(currentLesson.activity)}
+                  </p>
+                </div>
+              )}
+
+              {/* Key Takeaways */}
+              {currentLesson.keyTakeaways && currentLesson.keyTakeaways.length > 0 && (
+                <div className="reader-box">
+                  <strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
+                    Key Takeaways
+                  </strong>
+                  <ul
+                    style={{
+                      paddingLeft: 18,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      fontSize: 13,
+                      color: '#cbd5e1',
+                    }}
+                  >
+                    {currentLesson.keyTakeaways.map((item, idx) => (
+                      <li key={idx}>{sanitizeHandbookTitle(item)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Supplemental Note */}
+              {currentLesson.supplementalNote && (
+                <div className="reader-box" style={{ borderColor: 'rgba(124, 58, 237, 0.35)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span className="pill pill-violet">Supplemental</span>
+                    <strong style={{ fontSize: 13.5 }}>
+                      {sanitizeHandbookTitle(currentLesson.supplementalNote.label)}
+                    </strong>
+                  </div>
+                  <p className="reader-prose" style={{ fontSize: 13 }}>
+                    {sanitizeHandbookTitle(currentLesson.supplementalNote.content)}
                   </p>
                 </div>
               )}
@@ -476,18 +576,30 @@ export const AiReadinessReader: React.FC<AiReadinessReaderProps> = ({
                 </button>
 
                 <span className="muted-text" style={{ fontSize: 12 }}>
-                  {course.attribution}
+                  {sanitizeHandbookTitle(course.attribution)}
                 </span>
 
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!nextTarget}
-                  onClick={() => nextTarget && setCursor(nextTarget)}
-                >
-                  <span>Next Lesson</span>
-                  <ChevronRight size={15} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {onOpenAssessments && currentModule && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => onOpenAssessments(currentModule.id)}
+                    >
+                      <ListChecks size={15} />
+                      <span>Take Module {safeModuleIdx + 1} Assessment</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!nextTarget}
+                    onClick={() => nextTarget && setCursor(nextTarget)}
+                  >
+                    <span>Next Lesson</span>
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
               </footer>
             </>
           )}

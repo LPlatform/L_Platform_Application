@@ -25,6 +25,8 @@ interface CourseAssessmentsProps {
   isOnline: boolean;
   onAttemptChanged: () => void;
   onOpenResults?: () => void;
+  focusModuleId?: string | null;
+  onClearFocusModule?: () => void;
 }
 
 type OptionEntry = string | { id?: string; text?: string; label?: string };
@@ -43,6 +45,8 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
   isOnline,
   onAttemptChanged,
   onOpenResults,
+  focusModuleId = null,
+  onClearFocusModule,
 }) => {
   const [assessments, setAssessments] = useState<CourseAssessment[]>([]);
   const [results, setResults] = useState<AssessmentResultRecord[]>([]);
@@ -89,8 +93,10 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
 
   const latestAttemptByAssignment = new Map<string, AssessmentResultRecord>();
   for (const r of results) {
-    if (!latestAttemptByAssignment.has(r.assignmentId)) {
-      latestAttemptByAssignment.set(r.assignmentId, r);
+    const key =
+      r.assignmentId ?? (r as AssessmentResultRecord & { assessmentId?: string }).assessmentId;
+    if (key && !latestAttemptByAssignment.has(key)) {
+      latestAttemptByAssignment.set(key, r);
     }
   }
 
@@ -122,8 +128,10 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
           attemptId: started.attemptId,
           questions: started.questions,
         });
-        setAnswers({});
-        setSaved({});
+        const resumedAnswers =
+          (started as { savedAnswers?: Record<string, unknown> }).savedAnswers ?? {};
+        setAnswers(resumedAnswers);
+        setSaved(Object.fromEntries(Object.keys(resumedAnswers).map((qid) => [qid, true])));
         setCurrentQuestion(0);
         setResult(null);
       } else {
@@ -156,11 +164,12 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
     setBusy(true);
     setActionError('');
     try {
-      const current = active.questions[currentQuestion];
-      if (current && !saved[current.id] && answers[current.id] !== undefined) {
-        await saveCourseAssessmentAnswer(active.attemptId, current.id, answers[current.id]);
+      for (const q of active.questions) {
+        if (!saved[q.id] && answers[q.id] !== undefined) {
+          await saveCourseAssessmentAnswer(active.attemptId, q.id, answers[q.id]);
+        }
       }
-      const res = await submitCourseAssessment(active.attemptId);
+      const res = await submitCourseAssessment(active.attemptId, answers);
       setResult(res);
       setActive(null);
       setSelectedAssessment(null);
@@ -436,6 +445,15 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
   if (selectedAssessment) {
     const existingAttempt = latestAttemptByAssignment.get(selectedAssessment.id);
     const isInProgress = existingAttempt?.status === 'IN_PROGRESS';
+    const isAwaitingRelease =
+      existingAttempt?.status === 'PENDING_REVIEW' || existingAttempt?.status === 'GRADED';
+    const isReleased = existingAttempt?.status === 'RELEASED';
+    const attemptLimit = selectedAssessment.attemptLimit ?? 1;
+    const completedCount = results.filter(
+      (r) =>
+        (r.assignmentId ?? r.assessmentId) === selectedAssessment.id && r.status !== 'IN_PROGRESS',
+    ).length;
+    const limitReached = !isInProgress && completedCount >= attemptLimit;
 
     return (
       <div className="panel-card" style={{ maxWidth: 740 }}>
@@ -484,22 +502,49 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!isOnline || busy}
-            onClick={() =>
-              void (isInProgress && existingAttempt
-                ? resumeByAttemptId(selectedAssessment, existingAttempt.attemptId)
-                : begin(selectedAssessment))
-            }
-          >
-            <Play size={14} />
-            <span>
-              {busy ? 'Opening…' : isInProgress ? 'Resume Attempt →' : 'Start Assessment →'}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}
+        >
+          {isAwaitingRelease && (
+            <span className="pill pill-violet">
+              {existingAttempt?.status === 'GRADED'
+                ? 'Graded — Awaiting Teacher Score Release'
+                : 'Submitted — Pending Teacher Review'}
             </span>
-          </button>
+          )}
+          {isReleased && existingAttempt && (
+            <span className="pill pill-success">
+              Latest Score: {existingAttempt.score ?? '—'} / {existingAttempt.totalMarks}
+            </span>
+          )}
+          {!limitReached && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!isOnline || busy}
+              onClick={() =>
+                void (isInProgress && existingAttempt
+                  ? resumeByAttemptId(selectedAssessment, existingAttempt.attemptId)
+                  : begin(selectedAssessment))
+              }
+            >
+              <Play size={14} />
+              <span>
+                {busy
+                  ? 'Opening…'
+                  : isInProgress
+                    ? 'Resume Attempt →'
+                    : completedCount > 0
+                      ? 'Start New Attempt →'
+                      : 'Start Assessment →'}
+              </span>
+            </button>
+          )}
+          {limitReached && onOpenResults && (
+            <button type="button" className="btn btn-secondary" onClick={onOpenResults}>
+              Open Results &amp; Feedback →
+            </button>
+          )}
         </div>
       </div>
     );
@@ -507,6 +552,7 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
 
   // Assessments Catalog & Filters
   const filteredAssessments = assessments.filter((a) => {
+    if (focusModuleId && a.moduleId !== focusModuleId) return false;
     const attempt = latestAttemptByAssignment.get(a.id);
     if (filter === 'ALL') return true;
     if (filter === 'IN_PROGRESS') return attempt?.status === 'IN_PROGRESS';
@@ -526,10 +572,15 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
         <div>
           <span className="eyebrow">Module Evaluations</span>
           <h1>Course Assessments</h1>
-          <p>Attempt published quizzes and open written/practical evaluations from your classes.</p>
+          <p>Attempt platform AI Readiness module evaluations and assigned class assessments.</p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {focusModuleId && onClearFocusModule && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClearFocusModule}>
+              <span>Filter: {focusModuleId.replaceAll('-', ' ')} ✕</span>
+            </button>
+          )}
           <div className="tabs-bar">
             {(['ALL', 'OPEN', 'IN_PROGRESS', 'COMPLETED'] as const).map((tabId) => (
               <button
@@ -587,6 +638,7 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
             const inProgress = attempt?.status === 'IN_PROGRESS';
             const released = attempt?.status === 'RELEASED';
             const pendingReview = attempt?.status === 'PENDING_REVIEW';
+            const gradedPendingRelease = attempt?.status === 'GRADED';
 
             return (
               <article className="panel-card" key={assessment.id}>
@@ -605,6 +657,8 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
                       <CheckCircle2 size={12} />
                       Score Released
                     </span>
+                  ) : gradedPendingRelease ? (
+                    <span className="pill pill-violet">Pending Release</span>
                   ) : pendingReview ? (
                     <span className="pill pill-violet">Pending Review</span>
                   ) : (
@@ -632,7 +686,7 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
                   <span className="muted-text" style={{ fontSize: 12 }}>
                     {released && attempt?.score !== null
                       ? `Score: ${attempt.score} / ${attempt.totalMarks}`
-                      : pendingReview
+                      : pendingReview || gradedPendingRelease
                         ? 'Waiting for teacher release'
                         : 'Ready to begin'}
                   </span>

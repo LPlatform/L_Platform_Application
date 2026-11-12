@@ -15,10 +15,24 @@ export interface TestCase {
   orderIndex: number;
 }
 
+export interface QuestionOption {
+  id: string;
+  optionText: string;
+  orderNum?: number;
+}
+
 export interface Question {
   id: string;
   title: string;
   description: string;
+  questionType?: string;
+  difficulty?: string;
+  topic?: string;
+  courseModuleId?: string | null;
+  sourcePage?: number | null;
+  sourceReference?: string | null;
+  estimatedMinutes?: number | null;
+  options?: QuestionOption[];
   starterTemplates?: Record<string, string>;
   points: number;
   testCases?: TestCase[];
@@ -28,12 +42,21 @@ export interface Assignment {
   id: string;
   organizationId: string;
   sectionId: string;
+  sectionName?: string;
+  className?: string;
   title: string;
   description: string | null;
-  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  assignmentType?: string;
+  allowFileUpload?: boolean;
+  attachmentInstructions?: string | null;
+  maxFileSizeMb?: number | null;
+  allowResubmit?: boolean;
+  totalMarks?: number | null;
+  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
   startDate: string | null;
   dueDate: string | null;
   questions?: Question[];
+  mySubmissions?: Submission[];
 }
 
 export interface SubmissionResult {
@@ -51,11 +74,18 @@ export interface Submission {
   id: string;
   assignmentId: string;
   questionId: string;
-  studentId: string;
-  language: 'PYTHON' | 'JAVA' | 'CPP';
+  studentId?: string;
+  language: 'PYTHON' | 'JAVA' | 'CPP' | string;
   sourceCode: string;
-  status: 'PENDING' | 'EVALUATING' | 'COMPLETED' | 'FAILED';
+  textResponse?: string | null;
+  responseData?: Record<string, unknown> | null;
+  attachmentName?: string | null;
+  attachmentMime?: string | null;
+  attachmentSizeBytes?: number | null;
+  status: 'PENDING' | 'PENDING_REVIEW' | 'EVALUATING' | 'COMPLETED' | 'GRADED' | 'FAILED';
   score?: number | null;
+  teacherFeedback?: string | null;
+  feedbackReleasedAt?: string | null;
   createdAt: string;
   results?: SubmissionResult[];
 }
@@ -69,20 +99,38 @@ export interface Draft {
   synced: boolean;
 }
 
+export interface LearningLesson {
+  id?: string;
+  title: string;
+  sourcePages?: string;
+  estimatedMinutes?: number;
+  learningOutcomes?: string[];
+  content: string;
+  examples?: string[];
+  activity: string;
+  keyTakeaways?: string[];
+  supplementalNote?: { label: string; content: string } | null;
+}
+
 export interface LearningCourse {
   id: string;
   title: string;
   description: string;
   attribution: string;
   sourceTitle: string;
+  recommendedHours?: number;
+  estimatedMinutes?: number;
   modules: Array<{
     id: string;
+    moduleNumber?: number;
     title: string;
     sourcePages: string;
+    estimatedMinutes?: number;
+    assessmentId?: string | null;
     introduction: string;
     objectives: string[];
     concepts: string[];
-    lessons: Array<{ title: string; content: string; activity: string }>;
+    lessons: LearningLesson[];
     revisionNotes: string[];
     practice: string[];
   }>;
@@ -97,6 +145,7 @@ export interface CatalogCourse {
   difficulty: string;
   status: string;
   version: number;
+  estimatedMinutes?: number | null;
   isPlatformCourse: boolean;
   scopeType: 'PLATFORM_FREE' | 'SCHOOL';
   accessEnabled: boolean;
@@ -141,13 +190,16 @@ export interface LessonProgressSnapshot {
 
 export interface CourseAssessment {
   id: string;
+  assignmentId?: string | null;
   assessmentId: string;
   moduleId: string;
+  scope?: 'PLATFORM' | 'SECTION';
   title: string;
   instructions: string;
   totalMarks: number;
   passingMarks: number | null;
   durationMinutes: number | null;
+  attemptLimit?: number;
   dueAt: string | null;
 }
 
@@ -162,8 +214,9 @@ export interface CourseAssessmentQuestion {
 
 export interface AssessmentAttemptDetail {
   attemptId: string;
-  assignmentId: string;
+  assignmentId: string | null;
   assessmentId: string;
+  assessmentKey?: string;
   title: string;
   instructions: string;
   durationMinutes: number | null;
@@ -188,7 +241,8 @@ export interface AssessmentResultBreakdownItem {
 export interface AssessmentResultRecord {
   attemptId: string;
   assessmentId: string;
-  assignmentId: string;
+  assignmentId: string | null;
+  assessmentKey?: string;
   attemptNumber: number;
   status: string;
   score: number | null;

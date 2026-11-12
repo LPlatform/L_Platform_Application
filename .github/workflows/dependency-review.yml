@@ -26,6 +26,6 @@ jobs:
       - name: Audit JavaScript lockfile
         run: pnpm audit --audit-level high
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - name: Audit Rust lockfile
         run: cargo install cargo-audit --locked && cargo audit
