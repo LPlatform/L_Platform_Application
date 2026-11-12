@@ -10,7 +10,6 @@ import {
   Library,
   School,
   Settings,
-  TrendingUp,
 } from 'lucide-react';
 import type { User, Assignment, Question } from './types';
 import { getStoredUser, clearAuthTokens, submitSolution } from './lib/api';
@@ -25,13 +24,13 @@ const primaryNav: Array<{
   label: string;
   Icon: React.ComponentType<{ size?: number }>;
 }> = [
-  { id: 'overview', label: 'Overview', Icon: Home },
+  { id: 'overview', label: 'Home', Icon: Home },
+  { id: 'learning', label: 'AI Course', Icon: BookOpen },
   { id: 'classes', label: 'My Classes', Icon: School },
-  { id: 'learning', label: 'My Learning', Icon: BookOpen },
-  { id: 'assessments', label: 'Assessments', Icon: ClipboardCheck },
   { id: 'assignments', label: 'Assignments', Icon: Code2 },
+  { id: 'assessments', label: 'Tests', Icon: ClipboardCheck },
   { id: 'results', label: 'Results', Icon: BarChart3 },
-  { id: 'progress', label: 'Progress', Icon: TrendingUp },
+  { id: 'library', label: 'Library', Icon: Library },
 ];
 
 export const App: React.FC = () => {
@@ -150,12 +149,11 @@ export const App: React.FC = () => {
           <div className="sidebar-brand">
             <div className="sidebar-brand-mark">LP</div>
             <div>
-              <strong>L_Platform</strong>
-              <span>Student Workspace</span>
+              <strong>L Platform</strong>
+              <span>Student</span>
             </div>
           </div>
 
-          <span className="sidebar-section-label">Workspace</span>
           <nav className="sidebar-menu">
             {primaryNav.map(({ id, label, Icon }) => (
               <button
@@ -172,18 +170,6 @@ export const App: React.FC = () => {
               </button>
             ))}
           </nav>
-
-          <button
-            type="button"
-            className={`sidebar-library-callout ${currentView === 'library' ? 'active' : ''}`}
-            onClick={() => goTo('library')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Library size={15} style={{ color: '#c4b5fd' }} />
-              <strong>Learning Library</strong>
-            </div>
-            <span>Browse free platform courses &amp; school modules</span>
-          </button>
 
           <div className="sidebar-footer">
             <button
@@ -206,18 +192,9 @@ export const App: React.FC = () => {
                 <span>Help &amp; Support</span>
               </span>
             </button>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 10px 2px',
-                fontSize: 11,
-                color: '#64748b',
-              }}
-            >
+            <div className="sidebar-role">
               <GraduationCap size={13} />
-              <span>{user.role.replaceAll('_', ' ')}</span>
+              <span>{user.role.replaceAll('_', ' ').toLowerCase()}</span>
             </div>
           </div>
         </aside>

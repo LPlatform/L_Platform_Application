@@ -51,7 +51,9 @@ import type {
   Submission,
   User,
 } from '../types';
-import { AiReadinessReader } from './AiReadinessReader';
+import { AiCourse } from './AiCourse';
+import { aiExplorersCourse, PASS_MARK } from '../content/ai-explorers';
+import { getCourseProgress } from '../lib/course-progress';
 import { JoinClassModal, LearningLibraryView, MyClassesView } from './ClassesAndLibrary';
 import { CourseAssessments } from './CourseAssessments';
 import { MultiTypeAssignmentWorkspace } from './MultiTypeAssignmentWorkspace';
@@ -274,6 +276,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
     .filter((c) => c.scopeType === 'PLATFORM_FREE')
     .slice(0, 3);
 
+  const aiScores = getCourseProgress();
+  const aiDone = aiExplorersCourse.lessons.filter((l) => (aiScores[l.id] ?? 0) >= PASS_MARK).length;
+
   return (
     <div className="workspace-scroll">
       <div className="workspace-container">
@@ -328,105 +333,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
 
-            {/* Hero Banner + Circular Progress Ring */}
-            <div className="overview-top-grid">
-              <section className="hero-learning-card">
-                <div>
-                  <span className="pill pill-violet">
-                    <Sparkles size={12} />
-                    Continue Learning
-                  </span>
-                  <h2>{course?.title || 'AI Readiness Course'}</h2>
-                  <p className="hero-lesson-meta">
-                    {continueModule && continueLesson
-                      ? `Module ${lastCursor.moduleIndex + 1} · ${continueLesson.title} (${continueModule.title})`
-                      : '8 structured modules covering AI Foundations, Neural Networks, Computer Vision, NLP, LLMs, Prompt Engineering, and Ethics.'}
-                  </p>
-                </div>
-
-                <div className="hero-actions">
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => onNavigate('learning')}
-                  >
-                    <span>Continue Learning →</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => onNavigate('assessments')}
-                  >
-                    <span>View Assessments</span>
-                  </button>
-                </div>
-              </section>
-
-              <section className="progress-ring-card">
-                <div className="panel-card-header">
-                  <h3>Your Learning Progress</h3>
-                  <button type="button" className="link-btn" onClick={() => onNavigate('progress')}>
-                    <span>Details →</span>
-                  </button>
-                </div>
-
-                <div className="progress-ring-body">
-                  <div className="ring-wrap">
-                    <svg width="112" height="112" viewBox="0 0 112 112">
-                      <defs>
-                        <linearGradient id="lpRingGrad" x1="0" y1="0" x2="1" y2="1">
-                          <stop offset="0%" stopColor="#10b981" />
-                          <stop offset="100%" stopColor="#3b82f6" />
-                        </linearGradient>
-                      </defs>
-                      <circle
-                        cx="56"
-                        cy="56"
-                        r={ringRadius}
-                        stroke="#1f2c47"
-                        strokeWidth="10"
-                        fill="transparent"
-                      />
-                      <circle
-                        cx="56"
-                        cy="56"
-                        r={ringRadius}
-                        stroke="url(#lpRingGrad)"
-                        strokeWidth="10"
-                        strokeLinecap="round"
-                        fill="transparent"
-                        strokeDasharray={ringCircumference}
-                        strokeDashoffset={ringOffset}
-                      />
-                    </svg>
-                    <div className="ring-center-label">
-                      <strong className="tabular-nums">{overallPercent}%</strong>
-                      <span>Completed</span>
-                    </div>
-                  </div>
-
-                  <div className="ring-metrics">
-                    <div className="ring-metric-row">
-                      <span>Modules Completed</span>
-                      <strong className="tabular-nums">
-                        {completedModulesCount} / {course?.modules.length ?? 8}
-                      </strong>
-                    </div>
-                    <div className="ring-metric-row">
-                      <span>Lessons Completed</span>
-                      <strong className="tabular-nums">
-                        {completedLessonsCount}
-                        {totalLessons > 0 ? ` / ${totalLessons}` : ''}
-                      </strong>
-                    </div>
-                    <div className="ring-metric-row">
-                      <span>Earned Marks</span>
-                      <strong className="tabular-nums">{progress?.earnedMarks ?? 0}</strong>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
+            <section className="hero-learning-card">
+              <span className="eyebrow">AI course</span>
+              <h2>{aiExplorersCourse.title}</h2>
+              <p className="hero-lesson-meta">
+                {aiDone} of {aiExplorersCourse.lessons.length} lessons complete · short lessons, a
+                fun activity and a quiz in each
+              </p>
+              <div className="progress-bar">
+                <span style={{ width: `${(aiDone / aiExplorersCourse.lessons.length) * 100}%` }} />
+              </div>
+              <div className="hero-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => onNavigate('learning')}
+                >
+                  {aiDone === 0 ? 'Start the course' : 'Continue learning'}
+                </button>
+              </div>
+            </section>
 
             {/* 4 Quick Action Cards */}
             <section className="quick-actions-grid" aria-label="Quick Actions">
@@ -501,7 +427,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="panel-card">
                 <div className="panel-card-header">
                   <h3>
-                    <Users size={16} style={{ color: '#60a5fa' }} />
+                    <Users size={16} style={{ color: '#2563eb' }} />
                     <span>My Classes</span>
                   </h3>
                   <button type="button" className="link-btn" onClick={() => onNavigate('classes')}>
@@ -541,7 +467,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="panel-card">
                 <div className="panel-card-header">
                   <h3>
-                    <CalendarClock size={16} style={{ color: '#a78bfa' }} />
+                    <CalendarClock size={16} style={{ color: '#2563eb' }} />
                     <span>Upcoming Work</span>
                   </h3>
                   <button
@@ -582,7 +508,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="panel-card">
                 <div className="panel-card-header">
                   <h3>
-                    <Activity size={16} style={{ color: '#34d399' }} />
+                    <Activity size={16} style={{ color: '#15803d' }} />
                     <span>Recent Activity</span>
                   </h3>
                   <button type="button" className="link-btn" onClick={() => onNavigate('results')}>
@@ -604,7 +530,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <CheckCircle2
                         size={15}
                         style={{
-                          color: act.tone === 'success' ? '#34d399' : '#a78bfa',
+                          color: act.tone === 'success' ? '#15803d' : '#2563eb',
                           flexShrink: 0,
                         }}
                       />
@@ -619,7 +545,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="panel-card-header">
                 <div>
                   <h3>
-                    <BookOpen size={16} style={{ color: '#c4b5fd' }} />
+                    <BookOpen size={16} style={{ color: '#2563eb' }} />
                     <span>Explore Platform Courses</span>
                   </h3>
                   <p className="muted-text" style={{ fontSize: 12.5, marginTop: 2 }}>
@@ -697,16 +623,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <LearningLibraryView courses={catalog} onOpenReader={() => onNavigate('learning')} />
         )}
 
-        {section === 'learning' && (
-          <AiReadinessReader
-            isOnline={isOnline}
-            onProgressUpdated={() => void loadWorkspaceData()}
-            onOpenAssessments={(moduleId) => {
-              setFocusAssessmentModuleId(moduleId ?? null);
-              onNavigate('assessments');
-            }}
-          />
-        )}
+        {section === 'learning' && <AiCourse />}
 
         {section === 'assessments' && (
           <CourseAssessments

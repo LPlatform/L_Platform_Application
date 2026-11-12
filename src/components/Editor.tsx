@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { Assignment, Question, Submission } from '../types';
 import { submitSolution, fetchSubmissionsForAssignment } from '../lib/api';
+import { CodeEditor } from './CodeEditor';
 import { saveDraft, getDraft, clearDraft, queueOfflineSubmission } from '../lib/storage';
 
 interface EditorProps {
@@ -42,7 +43,6 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
   const [fontSize, setFontSize] = useState<number>(14);
   const [historyError, setHistoryError] = useState('');
   const [splitPercent, setSplitPercent] = useState(42);
-  const lineNumbersRef = useRef<HTMLDivElement | null>(null);
 
   const loadSubmissions = useCallback(async () => {
     if (!isOnline) return;
@@ -75,8 +75,7 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
     void loadSubmissions();
   }, [assignment.id, language, loadSubmissions, question.id, question.starterTemplates]);
 
-  const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newCode = e.target.value;
+  const handleCodeChange = (newCode: string) => {
     setCode(newCode);
     saveDraft(assignment.id, question.id, language, newCode, false);
     setLastSaved(new Date());
@@ -101,27 +100,6 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
     setCode(starter);
     saveDraft(assignment.id, question.id, language, starter, false);
     setLastSaved(new Date());
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-      e.preventDefault();
-      handleSaveCheckpoint();
-      return;
-    }
-
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const target = e.target as HTMLTextAreaElement;
-      const start = target.selectionStart;
-      const end = target.selectionEnd;
-      const newVal = `${code.substring(0, start)}    ${code.substring(end)}`;
-      setCode(newVal);
-      saveDraft(assignment.id, question.id, language, newVal, false);
-      setTimeout(() => {
-        target.selectionStart = target.selectionEnd = start + 4;
-      }, 0);
-    }
   };
 
   const handleSubmit = async () => {
@@ -175,8 +153,6 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
       setSubmitting(false);
     }
   };
-
-  const lineCount = Math.max(code.split('\n').length, 1);
 
   const resizeSplit = (clientX: number, container: HTMLElement | null) => {
     if (!container) return;
@@ -569,32 +545,12 @@ export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, 
           )}
 
           <div className="ide-code-area">
-            <div
-              ref={lineNumbersRef}
-              className="ide-line-numbers tabular-nums"
-              style={{ fontSize: `${fontSize}px` }}
-              aria-hidden
-            >
-              {Array.from({ length: lineCount }).map((_, idx) => (
-                <div key={idx}>{idx + 1}</div>
-              ))}
-            </div>
-            <textarea
-              className="ide-textarea"
-              style={{ fontSize: `${fontSize}px` }}
+            <CodeEditor
               value={code}
               onChange={handleCodeChange}
-              onKeyDown={handleKeyDown}
-              onScroll={(e) => {
-                if (lineNumbersRef.current) {
-                  lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
-                }
-              }}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoComplete="off"
-              autoCorrect="off"
-              aria-label="Code editor"
+              language={language}
+              fontSize={fontSize}
+              onSave={handleSaveCheckpoint}
             />
           </div>
         </section>

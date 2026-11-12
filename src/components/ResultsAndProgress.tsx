@@ -138,7 +138,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                         <div style={{ textAlign: 'right' }}>
                           <strong
                             className="tabular-nums"
-                            style={{ fontSize: 22, color: item.passed ? '#34d399' : '#fbbf24' }}
+                            style={{ fontSize: 22, color: item.passed ? '#15803d' : '#b45309' }}
                           >
                             {item.score} / {item.totalMarks}
                           </strong>
@@ -213,7 +213,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                               style={{
                                 marginTop: 6,
                                 fontSize: 12.5,
-                                color: '#a7f3d0',
+                                color: '#15803d',
                               }}
                             >
                               Teacher feedback: {q.feedback}
@@ -250,7 +250,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                   {new Date(sub.createdAt).toLocaleString()}
                 </span>
                 {sub.feedbackReleasedAt && sub.teacherFeedback && (
-                  <span style={{ color: '#a7f3d0', fontSize: 12, marginTop: 2 }}>
+                  <span style={{ color: '#15803d', fontSize: 12, marginTop: 2 }}>
                     Teacher feedback: {sub.teacherFeedback}
                   </span>
                 )}
@@ -380,7 +380,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
         <section className="panel-card">
           <div className="panel-card-header">
             <h3>
-              <CheckCircle2 size={16} style={{ color: '#34d399' }} />
+              <CheckCircle2 size={16} style={{ color: '#15803d' }} />
               <span>AI Readiness Course — Module Breakdown</span>
             </h3>
             <span className="pill pill-violet tabular-nums">{percent}% overall</span>
@@ -416,7 +416,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                       height: 7,
                       width: '100%',
                       borderRadius: 999,
-                      background: '#090d16',
+                      background: '#f1f3f5',
                       overflow: 'hidden',
                     }}
                   >
@@ -425,10 +425,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                         height: '100%',
                         width: `${pct}%`,
                         borderRadius: 999,
-                        background:
-                          pct === 100
-                            ? 'linear-gradient(90deg, #10b981, #34d399)'
-                            : 'linear-gradient(90deg, #7c3aed, #3b82f6)',
+                        background: pct === 100 ? '#15803d' : '#2563eb',
                         transition: 'width 0.3s ease',
                       }}
                     />
@@ -482,7 +479,7 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
           <div className="panel-card">
             <div className="panel-card-header">
               <h3>
-                <WifiOff size={16} style={{ color: '#fbbf24' }} />
+                <WifiOff size={16} style={{ color: '#b45309' }} />
                 <span>Working Offline</span>
               </h3>
             </div>
@@ -496,7 +493,7 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
           <div className="panel-card">
             <div className="panel-card-header">
               <h3>
-                <Keyboard size={16} style={{ color: '#a78bfa' }} />
+                <Keyboard size={16} style={{ color: '#2563eb' }} />
                 <span>IDE Shortcuts</span>
               </h3>
             </div>
@@ -510,7 +507,7 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
           <div className="panel-card">
             <div className="panel-card-header">
               <h3>
-                <Clock size={16} style={{ color: '#38bdf8' }} />
+                <Clock size={16} style={{ color: '#0369a1' }} />
                 <span>Assessment Grading &amp; Score Release</span>
               </h3>
             </div>
@@ -524,7 +521,7 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
           <div className="panel-card">
             <div className="panel-card-header">
               <h3>
-                <HelpCircle size={16} style={{ color: '#34d399' }} />
+                <HelpCircle size={16} style={{ color: '#15803d' }} />
                 <span>Joining a School Class</span>
               </h3>
             </div>
@@ -553,7 +550,7 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
         <form className="panel-card" onSubmit={handleSaveApi}>
           <div className="panel-card-header">
             <h3>
-              <Server size={16} style={{ color: '#a78bfa' }} />
+              <Server size={16} style={{ color: '#2563eb' }} />
               <span>Backend API Connection</span>
             </h3>
             <span className={`pill ${isOnline ? 'pill-success' : 'pill-warning'}`}>
@@ -589,7 +586,7 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
         <div className="panel-card">
           <div className="panel-card-header">
             <h3>
-              <Database size={16} style={{ color: '#38bdf8' }} />
+              <Database size={16} style={{ color: '#0369a1' }} />
               <span>Offline Storage &amp; Sync Queue</span>
             </h3>
           </div>
