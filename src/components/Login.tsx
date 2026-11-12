@@ -48,6 +48,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
   };
 
   const handleQuickFill = (studentEmail: string) => {
+    if (!import.meta.env.DEV) return;
     setEmail(studentEmail);
     setPassword('Student@123');
     setError('');
@@ -213,27 +214,29 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
             </button>
           </form>
 
-          <div className="quick-accounts">
-            <span className="quick-accounts-label">Local Seeded Student Accounts</span>
-            <div className="quick-account-grid">
-              <button
-                type="button"
-                className="quick-account-btn"
-                onClick={() => handleQuickFill('student1@riverside.edu')}
-              >
-                <strong>Alice Student</strong>
-                <span>student1@riverside.edu</span>
-              </button>
-              <button
-                type="button"
-                className="quick-account-btn"
-                onClick={() => handleQuickFill('student2@riverside.edu')}
-              >
-                <strong>Bob Smith</strong>
-                <span>student2@riverside.edu</span>
-              </button>
+          {import.meta.env.DEV && (
+            <div className="quick-accounts">
+              <span className="quick-accounts-label">Local Seeded Student Accounts</span>
+              <div className="quick-account-grid">
+                <button
+                  type="button"
+                  className="quick-account-btn"
+                  onClick={() => handleQuickFill('student1@riverside.edu')}
+                >
+                  <strong>Alice Student</strong>
+                  <span>student1@riverside.edu</span>
+                </button>
+                <button
+                  type="button"
+                  className="quick-account-btn"
+                  onClick={() => handleQuickFill('student2@riverside.edu')}
+                >
+                  <strong>Bob Smith</strong>
+                  <span>student2@riverside.edu</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </section>
       </main>
 

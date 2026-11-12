@@ -347,8 +347,67 @@ export const LearningLibraryView: React.FC<LearningLibraryViewProps> = ({
     filter === 'ALL' ? true : course.scopeType === filter,
   );
 
+  const platformCourses = filtered.filter((c) => c.scopeType === 'PLATFORM_FREE');
+  const schoolCourses = filtered.filter((c) => c.scopeType === 'SCHOOL');
   const platformCount = courses.filter((c) => c.scopeType === 'PLATFORM_FREE').length;
   const schoolCount = courses.filter((c) => c.scopeType === 'SCHOOL').length;
+
+  const renderCourseCard = (course: CatalogCourse) => (
+    <article className="course-card" key={course.id}>
+      <div className="course-card-top">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {course.scopeType === 'PLATFORM_FREE' ? (
+            <span className="pill pill-free">
+              <Globe size={11} />
+              Platform Free
+            </span>
+          ) : (
+            <span className="pill pill-school">
+              <GraduationCap size={11} />
+              School Course
+            </span>
+          )}
+          <span className="pill">{course.language}</span>
+          {course.estimatedMinutes ? (
+            <span className="pill tabular-nums">
+              {Math.round(course.estimatedMinutes / 60)} hrs
+            </span>
+          ) : null}
+        </div>
+        <span className="pill">{course.difficulty}</span>
+      </div>
+
+      <div>
+        <h3 style={{ fontSize: 16.5, fontWeight: 700 }}>{course.title}</h3>
+        <span className="muted-text" style={{ fontSize: 11.5 }}>
+          {course.category} · v{course.version}
+        </span>
+      </div>
+
+      <p>{course.description || 'Structured L_Platform course curriculum.'}</p>
+
+      <div className="course-card-footer">
+        {course.accessEnabled ? (
+          <span className="pill pill-success">
+            {course.scopeType === 'PLATFORM_FREE' ? 'Open to All Students' : 'Access Enabled'}
+          </span>
+        ) : (
+          <span className="pill pill-warning">Requires School Allocation</span>
+        )}
+
+        {course.hasInteractiveReader ? (
+          <button type="button" className="btn btn-primary btn-sm" onClick={onOpenReader}>
+            <Sparkles size={13} />
+            <span>Open Reader →</span>
+          </button>
+        ) : (
+          <span className="muted-text" style={{ fontSize: 11.5 }}>
+            {course.accessEnabled ? 'Curriculum overview only' : 'Join a school class to unlock'}
+          </span>
+        )}
+      </div>
+    </article>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -357,8 +416,8 @@ export const LearningLibraryView: React.FC<LearningLibraryViewProps> = ({
           <span className="eyebrow">Course Catalog</span>
           <h1>Learning Library</h1>
           <p>
-            Explore free platform-wide courses alongside courses allocated specifically by your
-            school or organization.
+            Explore free platform-wide courses available immediately alongside school courses
+            allocated by your institution.
           </p>
         </div>
 
@@ -404,56 +463,30 @@ export const LearningLibraryView: React.FC<LearningLibraryViewProps> = ({
           </p>
         </div>
       ) : (
-        <div className="cards-grid-3">
-          {filtered.map((course) => (
-            <article className="course-card" key={course.id}>
-              <div className="course-card-top">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {course.scopeType === 'PLATFORM_FREE' ? (
-                    <span className="pill pill-free">
-                      <Globe size={11} />
-                      Platform Free
-                    </span>
-                  ) : (
-                    <span className="pill pill-school">
-                      <GraduationCap size={11} />
-                      School Course
-                    </span>
-                  )}
-                  <span className="pill">{course.language}</span>
-                </div>
-                <span className="pill">{course.difficulty}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {platformCourses.length > 0 && (
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <h2 style={{ fontSize: 16, fontWeight: 700 }}>Explore Platform Courses</h2>
+                <span className="pill pill-free">Available without class enrollment</span>
               </div>
+              <div className="cards-grid-3">{platformCourses.map(renderCourseCard)}</div>
+            </section>
+          )}
 
-              <div>
-                <h3 style={{ fontSize: 16.5, fontWeight: 700 }}>{course.title}</h3>
-                <span className="muted-text" style={{ fontSize: 11.5 }}>
-                  {course.category} · v{course.version}
-                </span>
+          {schoolCourses.length > 0 && (
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <h2 style={{ fontSize: 16, fontWeight: 700 }}>My School Courses</h2>
+                <span className="pill pill-school">Organization &amp; Section Allocations</span>
               </div>
-
-              <p>{course.description || 'Structured L_Platform course curriculum.'}</p>
-
-              <div className="course-card-footer">
-                {course.accessEnabled ? (
-                  <span className="pill pill-success">Access Enabled</span>
-                ) : (
-                  <span className="pill pill-warning">Requires Allocation</span>
-                )}
-
-                {course.hasInteractiveReader ? (
-                  <button type="button" className="btn btn-primary btn-sm" onClick={onOpenReader}>
-                    <Sparkles size={13} />
-                    <span>Open Reader →</span>
-                  </button>
-                ) : (
-                  <span className="muted-text" style={{ fontSize: 11.5 }}>
-                    {course.accessEnabled ? 'Curriculum overview only' : 'Locked by org admin'}
-                  </span>
-                )}
-              </div>
-            </article>
-          ))}
+              <div className="cards-grid-3">{schoolCourses.map(renderCourseCard)}</div>
+            </section>
+          )}
         </div>
       )}
     </div>

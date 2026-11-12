@@ -44,8 +44,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <span className="eyebrow">Academic Record</span>
           <h1>Results &amp; Teacher Feedback</h1>
           <p>
-            Review released assessment scores, question-level rubric feedback, and coding submission
-            statuses.
+            Review released assessment scores, question-level rubric feedback, and assignment
+            submission statuses.
           </p>
         </div>
 
@@ -63,7 +63,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               className={`tab-btn ${tab === 'coding' ? 'active' : ''}`}
               onClick={() => setTab('coding')}
             >
-              Coding Submissions ({submissions.length})
+              Assignment Submissions ({submissions.length})
             </button>
           </div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onRefresh}>
@@ -233,9 +233,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <div className="empty-card-icon">
             <Code2 size={22} />
           </div>
-          <h3>No coding submissions yet</h3>
+          <h3>No assignment submissions yet</h3>
           <p className="muted-text">
-            Open an assignment in the Coding IDE to submit Python, Java, or C++ solutions.
+            Submit solutions in Assignments (IDE or written/case-study workspace) to track status
+            and released feedback here.
           </p>
         </div>
       ) : (
@@ -243,25 +244,37 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           {submissions.map((sub) => (
             <article className="panel-item-row" key={sub.id} style={{ padding: '14px 16px' }}>
               <div className="panel-item-meta">
-                <strong>{assignmentTitleById.get(sub.assignmentId) || 'Coding Assignment'}</strong>
+                <strong>{assignmentTitleById.get(sub.assignmentId) || 'Assignment'}</strong>
                 <span>
-                  {sub.language} · Submitted {new Date(sub.createdAt).toLocaleString()}
+                  {sub.textResponse ? 'Written / Practical' : sub.language} · Submitted{' '}
+                  {new Date(sub.createdAt).toLocaleString()}
                 </span>
+                {sub.feedbackReleasedAt && sub.teacherFeedback && (
+                  <span style={{ color: '#a7f3d0', fontSize: 12, marginTop: 2 }}>
+                    Teacher feedback: {sub.teacherFeedback}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span
                   className={`pill ${
-                    sub.status === 'COMPLETED'
+                    sub.status === 'COMPLETED' || sub.status === 'GRADED'
                       ? 'pill-success'
                       : sub.status === 'FAILED'
                         ? 'pill-danger'
                         : 'pill-warning'
                   }`}
                 >
-                  {sub.status}
+                  {sub.status.replaceAll('_', ' ')}
                 </span>
                 <strong className="tabular-nums" style={{ fontSize: 13.5 }}>
-                  {sub.score == null ? 'Pending worker evaluation' : `${sub.score} pts`}
+                  {sub.score != null && sub.feedbackReleasedAt !== undefined
+                    ? sub.feedbackReleasedAt || sub.status === 'COMPLETED'
+                      ? `${sub.score} pts`
+                      : 'Graded (Awaiting Release)'
+                    : sub.status === 'PENDING_REVIEW'
+                      ? 'Pending teacher review'
+                      : 'Pending evaluation'}
                 </strong>
               </div>
             </article>

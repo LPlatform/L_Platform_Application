@@ -80,8 +80,12 @@ async function renewSession(): Promise<void> {
 
 async function request<T>(path: string, init: RequestInit = {}, allowRefresh = true): Promise<T> {
   await loadSecureCredentials();
+  const hasJsonBody =
+    init.body !== undefined && init.body !== null && !(init.body instanceof FormData);
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+  if (hasJsonBody && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (authToken) headers.set('Authorization', `Bearer ${authToken}`);
   let response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
@@ -92,7 +96,9 @@ async function request<T>(path: string, init: RequestInit = {}, allowRefresh = t
     try {
       await renewSession();
       const retryHeaders = new Headers(init.headers);
-      retryHeaders.set('Content-Type', 'application/json');
+      if (hasJsonBody && !retryHeaders.has('Content-Type')) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
       retryHeaders.set('Authorization', `Bearer ${authToken}`);
       response = await fetch(`${apiBaseUrl}${path}`, {
         ...init,
@@ -112,6 +118,9 @@ async function request<T>(path: string, init: RequestInit = {}, allowRefresh = t
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.message || payload.error || `Request failed (${response.status})`);
+  }
+  if (response.status === 204) {
+    return undefined as T;
   }
   return response.json() as Promise<T>;
 }
@@ -166,9 +175,39 @@ function normalizeQuestion(raw: any): Question {
     id: raw.id,
     title: raw.title,
     description: raw.description,
+    questionType: raw.questionType ?? 'PROGRAMMING',
+    difficulty: raw.difficulty,
+    topic: raw.topic,
+    courseModuleId: raw.courseModuleId ?? null,
+    sourcePage: raw.sourcePage ?? null,
+    sourceReference: raw.sourceReference ?? null,
+    estimatedMinutes: raw.estimatedMinutes ?? null,
+    options: Array.isArray(raw.options) ? raw.options : [],
     points: raw.marks ?? raw.points ?? 0,
     starterTemplates: raw.starterTemplates ?? {},
     testCases: raw.testCases ?? [],
+  };
+}
+
+function normalizeSubmission(raw: any): Submission {
+  return {
+    id: raw.id,
+    assignmentId: raw.assignmentId,
+    questionId: raw.questionId,
+    studentId: raw.studentId,
+    language: raw.language ?? 'PYTHON',
+    sourceCode: raw.code ?? raw.sourceCode ?? '',
+    textResponse: raw.textResponse ?? null,
+    responseData: raw.responseData ?? null,
+    attachmentName: raw.attachmentName ?? null,
+    attachmentMime: raw.attachmentMime ?? null,
+    attachmentSizeBytes: raw.attachmentSizeBytes ?? null,
+    status: raw.status,
+    score: raw.score ?? null,
+    teacherFeedback: raw.teacherFeedback ?? null,
+    feedbackReleasedAt: raw.feedbackReleasedAt ?? null,
+    createdAt: raw.submittedAt ?? raw.createdAt ?? new Date().toISOString(),
+    results: raw.results ?? [],
   };
 }
 
@@ -177,12 +216,23 @@ function normalizeAssignment(raw: any): Assignment {
     id: raw.id,
     organizationId: raw.organizationId,
     sectionId: raw.sectionId,
+    sectionName: raw.sectionName,
+    className: raw.className,
     title: raw.title,
     description: raw.description ?? null,
+    assignmentType: raw.assignmentType ?? 'PROGRAMMING',
+    allowFileUpload: Boolean(raw.allowFileUpload),
+    attachmentInstructions: raw.attachmentInstructions ?? null,
+    maxFileSizeMb: raw.maxFileSizeMb ?? null,
+    allowResubmit: raw.allowResubmit ?? true,
+    totalMarks: raw.totalMarks ?? null,
     status: raw.status,
     startDate: raw.startDate ?? null,
     dueDate: raw.dueDate ?? null,
     questions: (raw.questions ?? []).filter(Boolean).map(normalizeQuestion),
+    mySubmissions: Array.isArray(raw.mySubmissions)
+      ? raw.mySubmissions.map((s: any) => normalizeSubmission({ ...s, assignmentId: raw.id }))
+      : [],
   };
 }
 
@@ -243,15 +293,20 @@ export async function fetchCourseAssessments(): Promise<CourseAssessment[]> {
   return result as CourseAssessment[];
 }
 
-export function startCourseAssessment(
-  assignmentId: string,
-): Promise<{ attemptId: string; status?: string; questions?: CourseAssessmentQuestion[] }> {
-  return request<{ attemptId: string; status?: string; questions?: CourseAssessmentQuestion[] }>(
-    `/api/learning/assessments/${encodeURIComponent(assignmentId)}/attempts`,
-    {
-      method: 'POST',
-    },
-  );
+export function startCourseAssessment(assignmentId: string): Promise<{
+  attemptId: string;
+  status?: string;
+  questions?: CourseAssessmentQuestion[];
+  savedAnswers?: Record<string, unknown>;
+}> {
+  return request<{
+    attemptId: string;
+    status?: string;
+    questions?: CourseAssessmentQuestion[];
+    savedAnswers?: Record<string, unknown>;
+  }>(`/api/learning/assessments/${encodeURIComponent(assignmentId)}/attempts`, {
+    method: 'POST',
+  });
 }
 
 export function saveCourseAssessmentAnswer(
@@ -265,10 +320,16 @@ export function saveCourseAssessmentAnswer(
   );
 }
 
-export function submitCourseAssessment(attemptId: string) {
-  return request<{ status: string; score: number | null; totalMarks: number }>(
+export function submitCourseAssessment(attemptId: string, answers?: Record<string, unknown>) {
+  const hasAnswers = Boolean(answers && Object.keys(answers).length > 0);
+  return request<{
+    status: string;
+    score: number | null;
+    totalMarks: number;
+    passed?: boolean | null;
+  }>(
     `/api/learning/attempts/${encodeURIComponent(attemptId)}/submit`,
-    { method: 'POST' },
+    hasAnswers ? { method: 'POST', body: JSON.stringify({ answers }) } : { method: 'POST' },
   );
 }
 
@@ -296,6 +357,41 @@ export async function fetchQuestion(questionId: string): Promise<Question> {
   return normalizeQuestion(raw);
 }
 
+export async function authorizeAttachmentUpload(payload: {
+  assignmentId: string;
+  fileName: string;
+  contentType?: string;
+  sizeBytes?: number;
+}): Promise<{
+  objectKey: string;
+  uploadUrl: string;
+  headers?: Record<string, string>;
+}> {
+  return request('/api/submissions/attachment-upload', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function submitAssignmentResponse(payload: {
+  assignmentId: string;
+  questionId: string;
+  code?: string;
+  language?: 'PYTHON' | 'JAVA' | 'CPP';
+  textResponse?: string;
+  responseData?: Record<string, unknown>;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentMime?: string;
+  attachmentSizeBytes?: number;
+}): Promise<Submission> {
+  const raw = await request<any>('/api/submissions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return normalizeSubmission({ ...raw, code: payload.code ?? raw.code ?? '' });
+}
+
 export async function submitSolution(payload: {
   assignmentId: string;
   questionId: string;
@@ -311,36 +407,14 @@ export async function submitSolution(payload: {
       code: payload.sourceCode,
     }),
   });
-  return {
-    id: raw.id,
-    assignmentId: raw.assignmentId,
-    questionId: raw.questionId,
-    studentId: raw.studentId,
-    language: raw.language,
-    sourceCode: payload.sourceCode,
-    status: raw.status,
-    score: raw.score,
-    createdAt: raw.submittedAt ?? new Date().toISOString(),
-    results: raw.results ?? [],
-  };
+  return normalizeSubmission({ ...raw, code: payload.sourceCode });
 }
 
 export async function fetchSubmissionsForAssignment(assignmentId: string): Promise<Submission[]> {
   const result = await request<{ items?: any[] }>(
     `/api/submissions?assignmentId=${encodeURIComponent(assignmentId)}`,
   );
-  return (result.items ?? []).map((raw) => ({
-    id: raw.id,
-    assignmentId: raw.assignmentId,
-    questionId: raw.questionId,
-    studentId: raw.studentId,
-    language: raw.language,
-    sourceCode: raw.code,
-    status: raw.status,
-    score: raw.score,
-    createdAt: raw.submittedAt,
-    results: raw.results ?? [],
-  }));
+  return (result.items ?? []).map(normalizeSubmission);
 }
 
 export async function refreshAccessToken(): Promise<void> {
