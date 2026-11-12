@@ -84,7 +84,11 @@ jobs:
             [ -d "$d" ] || continue
             find "$d" -maxdepth 2 -type f \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -exec cp {} out/ \;
           done
-          ls out/* >/dev/null 2>&1 || { echo 'No installer was produced.'; exit 1; }
+          if [ "$RUNNER_OS" = Windows ]; then
+            ls out/*.msi out/*.exe >/dev/null 2>&1 || { echo 'No MSI or NSIS installer was produced.'; exit 1; }
+          else
+            ls out/*.deb out/*.AppImage >/dev/null 2>&1 || { echo 'No Debian package or AppImage was produced.'; exit 1; }
+          fi
           (cd out && sha256sum * > "../SHA256SUMS-${{ matrix.target }}.txt") && mv "SHA256SUMS-${{ matrix.target }}.txt" out/
           ls -la out
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

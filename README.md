@@ -40,4 +40,4 @@ Set the repository variable **`VITE_API_URL`** (Settings → Secrets and variabl
 
 ## Security
 
-No secrets live in this repo. The student token is kept in Windows Credential Manager. All data access is checked by the backend (role checks + PostgreSQL row-level security).
+This is a public repository: no secrets, signing keys or backend code live here. The student token is kept in Windows Credential Manager. All data access is checked by the backend (role checks + PostgreSQL row-level security).
