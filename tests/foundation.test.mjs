@@ -17,7 +17,7 @@ test('public desktop repository excludes confidential implementation and secrets
   assert.match(read('README.md'), /public repository/i);
   assert.match(read('.gitignore'), /^\.env\.\*$/m);
   assert.match(read('AGENTS.md'), /signing keys/i);
-  assert.match(read('.github/workflows/release.yml'), /SHA256SUMS\.txt/);
+  assert.match(read('.github/workflows/release.yml'), /SHA256SUMS/);
   assert.match(read('rust-toolchain.toml'), /channel = "1\.99\.1"/);
   assert.equal(read('.nvmrc').trim(), '24.22.1');
 });

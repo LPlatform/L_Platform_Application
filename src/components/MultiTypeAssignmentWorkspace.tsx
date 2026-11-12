@@ -304,7 +304,7 @@ export const MultiTypeAssignmentWorkspace: React.FC<MultiTypeAssignmentWorkspace
               </p>
             )}
             {existingSubmission.feedbackReleasedAt && existingSubmission.teacherFeedback && (
-              <p style={{ marginTop: 6, fontSize: 13, color: '#a7f3d0' }}>
+              <p style={{ marginTop: 6, fontSize: 13, color: '#15803d' }}>
                 Teacher feedback: {existingSubmission.teacherFeedback}
               </p>
             )}
@@ -356,7 +356,7 @@ export const MultiTypeAssignmentWorkspace: React.FC<MultiTypeAssignmentWorkspace
         {assignment.allowFileUpload && (
           <div className="reader-box">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <Upload size={14} style={{ color: '#a78bfa' }} />
+              <Upload size={14} style={{ color: '#2563eb' }} />
               <strong style={{ fontSize: 13 }}>
                 File Attachment{' '}
                 {assignment.maxFileSizeMb ? `(Max ${assignment.maxFileSizeMb} MB)` : ''}

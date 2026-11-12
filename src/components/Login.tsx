@@ -61,7 +61,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
           <span className="brand-mark">LP</span>
           <div className="login-brand-text">
             <strong>L_Platform</strong>
-            <span>Student Desktop Workspace</span>
+            <span>Student app</span>
           </div>
         </div>
         <button
@@ -210,7 +210,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
             )}
 
             <button type="submit" className="btn btn-primary login-submit-btn" disabled={loading}>
-              {loading ? 'Authenticating…' : 'Sign In to Workspace →'}
+              {loading ? 'Authenticating…' : 'Sign in'}
             </button>
           </form>
 

@@ -23,7 +23,7 @@ interface NavbarProps {
 const VIEW_LABELS: Record<string, { title: string; subtitle: string }> = {
   overview: { title: 'Student Overview', subtitle: 'Courses, upcoming coursework & progress' },
   classes: { title: 'My Classes', subtitle: 'Enrolled sections, teachers & invite codes' },
-  learning: { title: 'AI Readiness Course', subtitle: 'Interactive curriculum & module reader' },
+  learning: { title: 'AI Course', subtitle: 'AI Explorers — lessons and quizzes' },
   assessments: { title: 'Assessments', subtitle: 'Published quizzes & module evaluations' },
   assignments: { title: 'Coding Assignments', subtitle: 'Practice & graded programming tasks' },
   results: {
@@ -188,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onLogout}
             title="Sign out"
             aria-label="Sign out"
-            style={{ padding: 5, color: '#fca5a5' }}
+            style={{ padding: 5, color: '#b91c1c' }}
           >
             <LogOut size={14} />
           </button>
