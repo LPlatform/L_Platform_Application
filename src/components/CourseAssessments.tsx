@@ -330,7 +330,7 @@ export const CourseAssessments: React.FC<CourseAssessmentsProps> = ({
                 }}
               >
                 <span className={`pill ${saved[question.id] ? 'pill-success' : ''}`}>
-                  {saved[question.id] ? 'Saved to backend' : 'Unsaved changes'}
+                  {saved[question.id] ? 'Saved' : 'Unsaved changes'}
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

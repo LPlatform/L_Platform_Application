@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   WifiOff,
 } from 'lucide-react';
-import { getApiBaseUrl, setApiBaseUrl } from '../lib/api';
+import { CAN_CONFIGURE_SERVER, getApiBaseUrl, setApiBaseUrl } from '../lib/api';
 import { countSavedDrafts, getCachedCoursesCatalog, getQueuedSubmissions } from '../lib/storage';
 import { getCourseCompletionPercent } from '../lib/student-workspace';
 import type { AssessmentResultRecord, Assignment, LearningCourse, Submission } from '../types';
@@ -542,46 +542,48 @@ export const SettingsAndHelpView: React.FC<SettingsAndHelpViewProps> = ({
         <div>
           <span className="eyebrow">Desktop Configuration</span>
           <h1>Workspace Settings</h1>
-          <p>Configure backend server connectivity and inspect offline local storage.</p>
+          <p>Offline drafts and queued submissions on this computer.</p>
         </div>
       </div>
 
       <div className="cards-grid-2">
-        <form className="panel-card" onSubmit={handleSaveApi}>
-          <div className="panel-card-header">
-            <h3>
-              <Server size={16} style={{ color: '#2563eb' }} />
-              <span>Backend API Connection</span>
-            </h3>
-            <span className={`pill ${isOnline ? 'pill-success' : 'pill-warning'}`}>
-              {isOnline ? 'Online' : 'Offline'}
-            </span>
-          </div>
-
-          {savedNotice && (
-            <div className="inline-banner success">
-              <span>{savedNotice}</span>
+        {CAN_CONFIGURE_SERVER && (
+          <form className="panel-card" onSubmit={handleSaveApi}>
+            <div className="panel-card-header">
+              <h3>
+                <Server size={16} style={{ color: '#2563eb' }} />
+                <span>Backend API Connection</span>
+              </h3>
+              <span className={`pill ${isOnline ? 'pill-success' : 'pill-warning'}`}>
+                {isOnline ? 'Online' : 'Offline'}
+              </span>
             </div>
-          )}
 
-          <div className="form-field">
-            <label htmlFor="settings-api-url">Backend Base URL</label>
-            <input
-              id="settings-api-url"
-              type="url"
-              className="input-control"
-              value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-            />
-          </div>
+            {savedNotice && (
+              <div className="inline-banner success">
+                <span>{savedNotice}</span>
+              </div>
+            )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="submit" className="btn btn-primary btn-sm">
-              <ShieldCheck size={14} />
-              <span>Save Endpoint</span>
-            </button>
-          </div>
-        </form>
+            <div className="form-field">
+              <label htmlFor="settings-api-url">Backend Base URL</label>
+              <input
+                id="settings-api-url"
+                type="url"
+                className="input-control"
+                value={apiUrl}
+                onChange={(e) => setApiUrl(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" className="btn btn-primary btn-sm">
+                <ShieldCheck size={14} />
+                <span>Save Endpoint</span>
+              </button>
+            </div>
+          </form>
+        )}
 
         <div className="panel-card">
           <div className="panel-card-header">

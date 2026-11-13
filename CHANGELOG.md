@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-11-13
+
+- Production installers no longer show or accept a server address (no Server Configuration, no API URL on sign-in or Settings); stored overrides are cleared.
+- Dependency security fix (minimatch).
+
 ## 0.3.0 — 2026-11-13
 
 - HackerRank-style redesign: top navigation, challenge board with search and filters (status, type, difficulty, assignment).
