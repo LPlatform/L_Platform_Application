@@ -12,7 +12,7 @@ import {
   Sparkles,
   WifiOff,
 } from 'lucide-react';
-import { getApiBaseUrl, login, setApiBaseUrl } from '../lib/api';
+import { CAN_CONFIGURE_SERVER, getApiBaseUrl, login, setApiBaseUrl } from '../lib/api';
 import type { User } from '../types';
 
 interface LoginProps {
@@ -60,18 +60,20 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
         <div className="login-brand">
           <span className="brand-mark">LP</span>
           <div className="login-brand-text">
-            <strong>L_Platform</strong>
+            <strong>L Platform</strong>
             <span>Student app</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={() => setShowServerConfig((v) => !v)}
-        >
-          <Server size={14} />
-          <span>{showServerConfig ? 'Hide Server URL' : 'Server Configuration'}</span>
-        </button>
+        {CAN_CONFIGURE_SERVER && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowServerConfig((v) => !v)}
+          >
+            <Server size={14} />
+            <span>{showServerConfig ? 'Hide Server URL' : 'Server Configuration'}</span>
+          </button>
+        )}
       </header>
 
       <main className="login-grid">
@@ -193,7 +195,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
               </div>
             </div>
 
-            {showServerConfig && (
+            {CAN_CONFIGURE_SERVER && showServerConfig && (
               <div className="server-config-box">
                 <div className="form-field" style={{ marginBottom: 0 }}>
                   <label htmlFor="backend-url-input">L_Platform API Endpoint</label>
@@ -240,11 +242,13 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
         </section>
       </main>
 
-      <footer className="login-topbar" style={{ justifyContent: 'center' }}>
-        <span className="muted-text" style={{ fontSize: 12 }}>
-          Connected API target: <code>{backendUrl}</code>
-        </span>
-      </footer>
+      {CAN_CONFIGURE_SERVER && (
+        <footer className="login-topbar" style={{ justifyContent: 'center' }}>
+          <span className="muted-text" style={{ fontSize: 12 }}>
+            Development server: <code>{backendUrl}</code>
+          </span>
+        </footer>
+      )}
     </div>
   );
 };

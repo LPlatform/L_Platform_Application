@@ -21,7 +21,15 @@ const API_URL_KEY = 'lp_backend_url';
 const USER_KEY = 'lp_user';
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-let apiBaseUrl = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
+/**
+ * Only development builds let you see or change the server address. Production installers always
+ * use the address baked in at build time and ignore any stored override, so students never see
+ * where the platform is hosted and can't be pointed at another server.
+ */
+export const CAN_CONFIGURE_SERVER = import.meta.env.DEV;
+
+let apiBaseUrl = (CAN_CONFIGURE_SERVER && localStorage.getItem(API_URL_KEY)) || DEFAULT_API_URL;
+if (!CAN_CONFIGURE_SERVER) localStorage.removeItem(API_URL_KEY);
 let authToken = '';
 let refreshToken = '';
 let credentialsLoaded: Promise<void> | null = null;
@@ -131,6 +139,7 @@ async function request<T>(path: string, init: RequestInit = {}, allowRefresh = t
 }
 
 export function setApiBaseUrl(url: string): void {
+  if (!CAN_CONFIGURE_SERVER) return;
   apiBaseUrl = url.replace(/\/+$/, '');
   localStorage.setItem(API_URL_KEY, apiBaseUrl);
 }
