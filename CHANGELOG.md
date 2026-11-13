@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 — 2026-11-13
+
+- macOS universal .dmg (Apple Silicon + Intel), ad-hoc signed.
+- Sign-in works on macOS/Linux (session kept in memory).
+
 ## 0.2.1 — 2026-11-13
 
 - Installers connect to the live API (https://l-platform-backend.vercel.app) by default.
