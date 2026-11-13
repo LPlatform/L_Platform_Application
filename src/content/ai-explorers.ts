@@ -525,3 +525,43 @@ export const aiExplorersCourse: { title: string; subtitle: string; lessons: Less
     },
   ],
 };
+
+export interface CourseModule {
+  id: string;
+  title: string;
+  badge: string; // emoji badge earned when every lesson in the module is passed
+  summary: string;
+  lessonIds: string[];
+}
+
+/** Lessons grouped into short modules (each ends with a badge). */
+export const aiExplorersModules: CourseModule[] = [
+  {
+    id: 'meet-ai',
+    title: 'Meet AI',
+    badge: '🌟',
+    summary: 'What AI is and where you already see it.',
+    lessonIds: ['what-is-ai', 'ai-around-us'],
+  },
+  {
+    id: 'how-ai-thinks',
+    title: 'How AI Thinks',
+    badge: '🧩',
+    summary: 'Data, training and the input → model → output idea.',
+    lessonIds: ['how-ai-learns', 'how-ai-works'],
+  },
+  {
+    id: 'chatbots',
+    title: 'Chatbots & LLMs',
+    badge: '💡',
+    summary: 'How chatbots guess words and how to ask good questions.',
+    lessonIds: ['what-is-llm', 'talking-to-ai'],
+  },
+  {
+    id: 'responsible-ai',
+    title: 'Responsible AI',
+    badge: '🛡️',
+    summary: 'Staying safe, kind and honest when using AI.',
+    lessonIds: ['safe-and-kind'],
+  },
+];

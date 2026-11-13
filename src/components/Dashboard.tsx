@@ -52,6 +52,7 @@ import type {
   User,
 } from '../types';
 import { AiCourse } from './AiCourse';
+import { ChallengeBoard } from './ChallengeBoard';
 import { aiExplorersCourse, PASS_MARK } from '../content/ai-explorers';
 import { getCourseProgress } from '../lib/course-progress';
 import { JoinClassModal, LearningLibraryView, MyClassesView } from './ClassesAndLibrary';
@@ -648,129 +649,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           />
         ) : (
           section === 'assignments' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div className="section-header-row">
-                <div>
-                  <span className="eyebrow">Practice &amp; Graded Tasks</span>
-                  <h1>Course &amp; Class Assignments</h1>
-                  <p>
-                    Complete coding challenges in the IDE and submit conceptual, short-answer, case
-                    study, or practical tasks from your classes.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => void loadWorkspaceData()}
-                >
-                  <RefreshCw size={13} />
-                  <span>Refresh</span>
-                </button>
-              </div>
-
-              {assignments.length === 0 ? (
-                <div className="empty-card">
-                  <div className="empty-card-icon">
-                    <FolderCode size={22} />
-                  </div>
-                  <h3>No published assignments yet</h3>
-                  <p className="muted-text">
-                    When your teacher publishes tasks to your section, they will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="cards-grid-2">
-                  {assignments.map((asg) => {
-                    const typeLabel = (asg.assignmentType || 'PROGRAMMING').replaceAll('_', ' ');
-                    return (
-                      <article className="panel-card" key={asg.id}>
-                        <div className="course-card-top">
-                          <div>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                              <span className="pill pill-info">{asg.status}</span>
-                              <span className="pill pill-violet">{typeLabel}</span>
-                            </div>
-                            <h3 style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>
-                              {asg.title}
-                            </h3>
-                          </div>
-                          {asg.dueDate && (
-                            <span className="pill">
-                              Due {new Date(asg.dueDate).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="muted-text" style={{ lineHeight: 1.55 }}>
-                          {asg.description || 'Complete the assigned questions.'}
-                        </p>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {(asg.questions ?? []).length === 0 ? (
-                            <span className="muted-text" style={{ fontSize: 12.5 }}>
-                              No questions attached to this assignment yet.
-                            </span>
-                          ) : (
-                            (asg.questions ?? []).map((q, qIdx) => {
-                              const isCodeQ = ['PROGRAMMING', 'CODE'].includes(
-                                (q.questionType ?? '').toUpperCase(),
-                              );
-                              const hasDraft = isCodeQ && Boolean(getDraft(asg.id, q.id));
-                              const latestSub = (asg.mySubmissions ?? []).find(
-                                (s) => s.questionId === q.id,
-                              );
-                              return (
-                                <div className="panel-item-row" key={q.id}>
-                                  <div className="panel-item-meta">
-                                    <strong>
-                                      {qIdx + 1}. {q.title}
-                                    </strong>
-                                    <span>
-                                      {q.points} pts ·{' '}
-                                      {(q.questionType ?? 'PROGRAMMING').replaceAll('_', ' ')}
-                                      {hasDraft ? ' · Local Draft Saved' : ''}
-                                      {latestSub
-                                        ? latestSub.feedbackReleasedAt && latestSub.score !== null
-                                          ? ` · Score ${latestSub.score}/${q.points}`
-                                          : ` · ${latestSub.status.replaceAll('_', ' ')}`
-                                        : ''}
-                                    </span>
-                                  </div>
-                                  {isCodeQ ? (
-                                    <button
-                                      type="button"
-                                      className="btn btn-primary btn-sm"
-                                      onClick={() => onSelectAssignment(asg, q)}
-                                    >
-                                      <Code2 size={13} />
-                                      <span>Open IDE</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="btn btn-primary btn-sm"
-                                      onClick={() =>
-                                        setActiveMultiAssignment({
-                                          assignment: asg,
-                                          questionId: q.id,
-                                        })
-                                      }
-                                    >
-                                      <ClipboardCheck size={13} />
-                                      <span>{latestSub ? 'View / Submit' : 'Open Task'}</span>
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <ChallengeBoard
+              assignments={assignments}
+              loading={loading}
+              onOpenCode={onSelectAssignment}
+              onOpenTask={(assignment, questionId) =>
+                setActiveMultiAssignment({ assignment, questionId })
+              }
+              onRefresh={() => void loadWorkspaceData()}
+            />
           )
         )}
 

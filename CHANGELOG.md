@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-11-13
+
+- HackerRank-style redesign: top navigation, challenge board with search and filters (status, type, difficulty, assignment).
+- Coding workspace: problem/editor split, **Run code** for Python against sample tests and custom input (runs offline with Pyodide, 5s time limit), Ctrl+Enter to run.
+- AI Explorers course regrouped into 4 modules with progress ring, badges and a step-by-step lesson player.
+
 ## 0.2.2 — 2026-11-13
 
 - macOS universal .dmg (Apple Silicon + Intel), ad-hoc signed.

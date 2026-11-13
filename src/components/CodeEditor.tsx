@@ -17,6 +17,7 @@ interface CodeEditorProps {
   language: CodeLanguage;
   fontSize?: number;
   onSave?: () => void;
+  onRun?: () => void;
   ariaLabel?: string;
 }
 
@@ -36,6 +37,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   language,
   fontSize = 14,
   onSave,
+  onRun,
   ariaLabel = 'Code editor',
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -46,6 +48,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const onSaveRef = useRef(onSave);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
+  const onRunRef = useRef(onRun);
+  onRunRef.current = onRun;
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -57,6 +61,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           basicSetup,
           keymap.of([
             indentWithTab,
+            {
+              key: 'Mod-Enter',
+              preventDefault: true,
+              run: () => {
+                onRunRef.current?.();
+                return true;
+              },
+            },
             {
               key: 'Mod-s',
               preventDefault: true,
