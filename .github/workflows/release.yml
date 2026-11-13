@@ -53,6 +53,10 @@ jobs:
             target: windows-x64
           - os: ubuntu-24.04
             target: linux-x64
+          # One universal .dmg for Apple Silicon and Intel Macs (ad-hoc signed, not notarized).
+          - os: macos-latest
+            target: macos-universal
+            tauri_args: --target universal-apple-darwin
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -72,24 +76,29 @@ jobs:
         run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
       - name: Rust gates (fmt, clippy, tests)
         run: cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace --all-targets
+      - name: Add macOS Rust targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Build native installer
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
-        run: pnpm tauri build
+        run: pnpm tauri build ${{ matrix.tauri_args }}
       - name: Collect installers and checksums
         shell: bash
         run: |
           mkdir -p out
-          for d in target/release/bundle src-tauri/target/release/bundle; do
+          for d in target/release/bundle src-tauri/target/release/bundle target/universal-apple-darwin/release/bundle src-tauri/target/universal-apple-darwin/release/bundle; do
             [ -d "$d" ] || continue
-            find "$d" -maxdepth 2 -type f \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -exec cp {} out/ \;
+            find "$d" -maxdepth 2 -type f \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' -o -name '*.dmg' \) -exec cp {} out/ \;
           done
-          if [ "$RUNNER_OS" = Windows ]; then
+          if [ "$RUNNER_OS" = macOS ]; then
+            ls out/*.dmg >/dev/null 2>&1 || { echo 'No macOS dmg was produced.'; exit 1; }
+          elif [ "$RUNNER_OS" = Windows ]; then
             ls out/*.msi out/*.exe >/dev/null 2>&1 || { echo 'No MSI or NSIS installer was produced.'; exit 1; }
           else
             ls out/*.deb out/*.AppImage >/dev/null 2>&1 || { echo 'No Debian package or AppImage was produced.'; exit 1; }
           fi
-          (cd out && sha256sum * > "../SHA256SUMS-${{ matrix.target }}.txt") && mv "SHA256SUMS-${{ matrix.target }}.txt" out/
+          (cd out && { if command -v sha256sum >/dev/null; then sha256sum *; else shasum -a 256 *; fi; } > "../SHA256SUMS-${{ matrix.target }}.txt") && mv "SHA256SUMS-${{ matrix.target }}.txt" out/
           ls -la out
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
