@@ -1,6 +1,6 @@
 {
   "name": "l-platform-app",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.18.0",
@@ -15,7 +15,9 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "predev": "node scripts/copy-pyodide.mjs",
+    "prebuild": "node scripts/copy-pyodide.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -31,6 +33,7 @@
     "clsx": "^2.1.1",
     "codemirror": "6.0.1",
     "lucide-react": "^0.475.0",
+    "pyodide": "0.27.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.0.0"

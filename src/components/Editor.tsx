@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ArrowLeft,
   CheckCircle2,
   Clock,
-  CloudOff,
-  FileCode2,
-  History,
+  Play,
   RotateCcw,
   Save,
   Send,
-  TestTube2,
+  Terminal,
   XCircle,
 } from 'lucide-react';
 import type { Assignment, Question, Submission } from '../types';
 import { submitSolution, fetchSubmissionsForAssignment } from '../lib/api';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, type CodeLanguage } from './CodeEditor';
 import { saveDraft, getDraft, clearDraft, queueOfflineSubmission } from '../lib/storage';
+import { runAgainstTests, runPython, type TestRun } from '../lib/python-runner';
 
 interface EditorProps {
   assignment: Assignment;
@@ -23,535 +23,439 @@ interface EditorProps {
   onBack: () => void;
 }
 
-const STARTER_CODE: Record<'PYTHON' | 'JAVA' | 'CPP', string> = {
-  PYTHON: `# Write your Python solution here\ndef solve():\n    pass\n\nif __name__ == '__main__':\n    solve()\n`,
+const STARTER_CODE: Record<CodeLanguage, string> = {
+  PYTHON: `# Read input, then print the answer.\ndef solve():\n    pass\n\nif __name__ == '__main__':\n    solve()\n`,
   JAVA: `import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Write your Java solution here\n    }\n}\n`,
   CPP: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your C++ solution here\n    return 0;\n}\n`,
 };
 
-export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, onBack }) => {
-  const [language, setLanguage] = useState<'PYTHON' | 'JAVA' | 'CPP'>('PYTHON');
-  const [code, setCode] = useState<string>('');
-  const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'problem' | 'tests' | 'results' | 'history'>(
-    'problem',
-  );
-  const [currentSubmission, setCurrentSubmission] = useState<Submission | null>(null);
-  const [previousSubmissions, setPreviousSubmissions] = useState<Submission[]>([]);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [feedbackMsg, setFeedbackMsg] = useState<string>('');
-  const [fontSize, setFontSize] = useState<number>(14);
-  const [historyError, setHistoryError] = useState('');
-  const [splitPercent, setSplitPercent] = useState(42);
+const LANG_LABEL: Record<CodeLanguage, string> = { PYTHON: 'Python 3', JAVA: 'Java', CPP: 'C++' };
 
-  const loadSubmissions = useCallback(async () => {
+type LeftTab = 'problem' | 'submissions';
+type ConsoleTab = 'tests' | 'custom';
+
+export const Editor: React.FC<EditorProps> = ({ assignment, question, isOnline, onBack }) => {
+  const [language, setLanguage] = useState<CodeLanguage>('PYTHON');
+  const [code, setCode] = useState('');
+  const [leftTab, setLeftTab] = useState<LeftTab>('problem');
+  const [consoleTab, setConsoleTab] = useState<ConsoleTab>('tests');
+  const [consoleOpen, setConsoleOpen] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [testRuns, setTestRuns] = useState<TestRun[] | null>(null);
+  const [customInput, setCustomInput] = useState('');
+  const [customOutput, setCustomOutput] = useState<{ out: string; err: string } | null>(null);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'warn' | 'err'; text: string } | null>(null);
+  const [history, setHistory] = useState<Submission[]>([]);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [fontSize, setFontSize] = useState(14);
+
+  const sampleTests = (question.testCases ?? []).filter((tc) => !tc.isHidden);
+  const canRun = language === 'PYTHON';
+
+  const loadHistory = useCallback(async () => {
     if (!isOnline) return;
-    setHistoryError('');
     try {
       const subs = await fetchSubmissionsForAssignment(assignment.id);
-      const filtered = subs.filter((s) => s.questionId === question.id);
-      setPreviousSubmissions(filtered);
-      if (filtered.length > 0 && !currentSubmission) {
-        setCurrentSubmission(filtered[0] ?? null);
-      }
-    } catch (err: unknown) {
-      setHistoryError(err instanceof Error ? err.message : 'Unable to load submission history.');
+      setHistory(subs.filter((s) => s.questionId === question.id));
+    } catch {
+      /* history is optional */
     }
-  }, [assignment.id, currentSubmission, isOnline, question.id]);
+  }, [assignment.id, isOnline, question.id]);
 
   useEffect(() => {
     const draft = getDraft(assignment.id, question.id);
     if (draft) {
-      setLanguage(draft.language);
+      setLanguage(draft.language as CodeLanguage);
       setCode(draft.code);
       setLastSaved(new Date(draft.updatedAt));
     } else {
-      const starter =
-        question.starterTemplates?.PYTHON ||
-        question.starterTemplates?.[language] ||
-        STARTER_CODE.PYTHON;
-      setCode(starter);
+      setCode(question.starterTemplates?.PYTHON || STARTER_CODE.PYTHON);
     }
-    void loadSubmissions();
-  }, [assignment.id, language, loadSubmissions, question.id, question.starterTemplates]);
+    void loadHistory();
+  }, [assignment.id, question.id, question.starterTemplates, loadHistory]);
 
-  const handleCodeChange = (newCode: string) => {
-    setCode(newCode);
-    saveDraft(assignment.id, question.id, language, newCode, false);
+  const persist = (next: string, lang = language) => {
+    saveDraft(assignment.id, question.id, lang, next, false);
     setLastSaved(new Date());
   };
 
-  const handleSaveCheckpoint = () => {
-    saveDraft(assignment.id, question.id, language, code, false);
-    setLastSaved(new Date());
-    setFeedbackMsg('Local draft checkpoint saved.');
+  const handleCodeChange = (next: string) => {
+    setCode(next);
+    persist(next);
   };
 
-  const handleLanguageChange = (newLang: 'PYTHON' | 'JAVA' | 'CPP') => {
-    setLanguage(newLang);
-    const starter = question.starterTemplates?.[newLang] || STARTER_CODE[newLang];
+  const switchLanguage = (lang: CodeLanguage) => {
+    setLanguage(lang);
+    const starter = question.starterTemplates?.[lang] || STARTER_CODE[lang];
     setCode(starter);
-    saveDraft(assignment.id, question.id, newLang, starter, false);
-    setLastSaved(new Date());
+    persist(starter, lang);
+    setTestRuns(null);
   };
 
-  const handleResetToTemplate = () => {
+  const resetCode = () => {
     const starter = question.starterTemplates?.[language] || STARTER_CODE[language];
     setCode(starter);
-    saveDraft(assignment.id, question.id, language, starter, false);
-    setLastSaved(new Date());
+    persist(starter);
   };
 
-  const handleSubmit = async () => {
+  const runTests = async () => {
+    if (!canRun) return;
+    setConsoleOpen(true);
+    setRunning(true);
+    setNotice(null);
+    try {
+      if (consoleTab === 'custom') {
+        const r = await runPython(code, customInput);
+        setCustomOutput({ out: r.stdout, err: r.stderr });
+      } else if (sampleTests.length === 0) {
+        setConsoleTab('custom');
+        const r = await runPython(code, customInput);
+        setCustomOutput({ out: r.stdout, err: r.stderr });
+      } else {
+        setTestRuns(await runAgainstTests(code, sampleTests));
+      }
+    } catch (e) {
+      setNotice({ kind: 'err', text: e instanceof Error ? e.message : 'Could not run code.' });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const submit = async () => {
     if (!code.trim()) return;
     setSubmitting(true);
-    setFeedbackMsg('');
-
+    setNotice(null);
+    const payload = {
+      assignmentId: assignment.id,
+      questionId: question.id,
+      language,
+      sourceCode: code,
+    };
     if (!isOnline) {
-      queueOfflineSubmission({
-        assignmentId: assignment.id,
-        questionId: question.id,
-        language,
-        sourceCode: code,
-      });
+      queueOfflineSubmission(payload);
       saveDraft(assignment.id, question.id, language, code, true);
       window.dispatchEvent(new Event('lp-queue-updated'));
-      setFeedbackMsg(
-        'Offline mode: Submission saved locally and queued. It will upload automatically when reconnected.',
-      );
+      setNotice({
+        kind: 'warn',
+        text: 'You are offline. Saved and queued — it uploads automatically when you reconnect.',
+      });
       setSubmitting(false);
       return;
     }
-
     try {
-      const submission = await submitSolution({
-        assignmentId: assignment.id,
-        questionId: question.id,
-        language,
-        sourceCode: code,
-      });
+      await submitSolution(payload);
       clearDraft(assignment.id, question.id);
       setLastSaved(null);
-      setCurrentSubmission(submission);
-      setActiveTab('results');
-      setFeedbackMsg(
-        'Solution saved cleanly. Execution stays PENDING until a sandbox evaluation worker processes the queue.',
-      );
-      void loadSubmissions();
-    } catch (err: unknown) {
-      queueOfflineSubmission({
-        assignmentId: assignment.id,
-        questionId: question.id,
-        language,
-        sourceCode: code,
+      setNotice({
+        kind: 'ok',
+        text: 'Submitted! Your teacher will review and release your score.',
       });
+      void loadHistory();
+    } catch (err) {
+      queueOfflineSubmission(payload);
       window.dispatchEvent(new Event('lp-queue-updated'));
-      setFeedbackMsg(
-        `${err instanceof Error ? err.message : 'Network error'}: queued submission locally for retry.`,
-      );
+      setNotice({
+        kind: 'warn',
+        text: `${err instanceof Error ? err.message : 'Network error'} — queued to retry automatically.`,
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const resizeSplit = (clientX: number, container: HTMLElement | null) => {
-    if (!container) return;
-    const bounds = container.getBoundingClientRect();
-    if (!bounds.width) return;
-    const rawPercent = ((clientX - bounds.left) / bounds.width) * 100;
-    const minPercent = (310 / bounds.width) * 100;
-    const maxPercent = 100 - (340 / bounds.width) * 100;
-    setSplitPercent(Math.min(maxPercent, Math.max(minPercent, rawPercent)));
-  };
-
-  const visibleTests = (question.testCases ?? []).filter((tc) => !tc.isHidden);
+  const passedCount = testRuns?.filter((t) => t.passed).length ?? 0;
 
   return (
-    <div className="ide-shell">
-      <div className="ide-subbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <strong
-            style={{
-              fontSize: 14,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {assignment.title} — {question.title}
-          </strong>
-          <span className="pill pill-violet tabular-nums">{question.points} Points</span>
+    <div className="hr-workspace">
+      <header className="hr-ws-bar">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}>
+          <ArrowLeft size={15} /> Challenges
+        </button>
+        <div className="hr-ws-title">
+          <strong>{question.title}</strong>
+          <span>
+            {assignment.title}
+            {question.difficulty ? ` · ${question.difficulty.toLowerCase()}` : ''} ·{' '}
+            {question.points} pts
+          </span>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {!isOnline && (
-            <span className="pill pill-warning">
-              <CloudOff size={12} />
-              Offline Queue Active
+        <div className="hr-ws-actions">
+          {lastSaved && (
+            <span className="hr-saved">
+              <Save size={12} /> Saved{' '}
+              {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={onBack}>
-            Back to Assignments
-          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="ide-split-container">
-        {/* Left Reference & Submissions Pane */}
-        <section className="ide-left-pane" style={{ width: `${splitPercent}%` }}>
-          <div className="ide-tab-strip" role="tablist">
+      <div className="hr-ws-body">
+        <section className="hr-pane hr-problem">
+          <div className="hr-tabs" role="tablist">
             <button
               type="button"
               role="tab"
-              aria-selected={activeTab === 'problem'}
-              className={`ide-tab ${activeTab === 'problem' ? 'active' : ''}`}
-              onClick={() => setActiveTab('problem')}
+              aria-selected={leftTab === 'problem'}
+              onClick={() => setLeftTab('problem')}
             >
-              <FileCode2 size={13} style={{ display: 'inline', marginRight: 5 }} />
               Problem
             </button>
             <button
               type="button"
               role="tab"
-              aria-selected={activeTab === 'tests'}
-              className={`ide-tab ${activeTab === 'tests' ? 'active' : ''}`}
-              onClick={() => setActiveTab('tests')}
+              aria-selected={leftTab === 'submissions'}
+              onClick={() => setLeftTab('submissions')}
             >
-              <TestTube2 size={13} style={{ display: 'inline', marginRight: 5 }} />
-              Test Cases ({visibleTests.length})
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'results'}
-              className={`ide-tab ${activeTab === 'results' ? 'active' : ''}`}
-              onClick={() => setActiveTab('results')}
-            >
-              <Clock size={13} style={{ display: 'inline', marginRight: 5 }} />
-              Evaluation
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'history'}
-              className={`ide-tab ${activeTab === 'history' ? 'active' : ''}`}
-              onClick={() => setActiveTab('history')}
-            >
-              <History size={13} style={{ display: 'inline', marginRight: 5 }} />
-              History ({previousSubmissions.length})
+              Submissions {history.length > 0 && <span className="hr-count">{history.length}</span>}
             </button>
           </div>
 
-          <div className="ide-pane-scroll">
-            {activeTab === 'problem' && (
+          <div className="hr-pane-scroll">
+            {leftTab === 'problem' ? (
               <>
-                <span className="eyebrow">Problem Specification</span>
-                <h2 style={{ fontSize: 19, fontWeight: 700 }}>{question.title}</h2>
-                <p className="reader-prose" style={{ fontSize: 13.5 }}>
-                  {question.description}
-                </p>
-              </>
-            )}
-
-            {activeTab === 'tests' && (
-              <>
-                <span className="eyebrow">Sample Test Cases</span>
-                {visibleTests.length === 0 ? (
-                  <p className="muted-text">No public sample test cases attached.</p>
-                ) : (
-                  visibleTests.map((tc, idx) => (
-                    <div className="reader-box" key={tc.id || idx} style={{ padding: 12 }}>
-                      <strong style={{ fontSize: 12.5, display: 'block', marginBottom: 8 }}>
-                        Sample Case #{idx + 1}
-                      </strong>
-                      <div style={{ marginBottom: 8 }}>
-                        <span className="muted-text" style={{ fontSize: 11.5 }}>
-                          Input:
-                        </span>
-                        <pre className="pre-code" style={{ marginTop: 4 }}>
-                          {tc.input || '(empty)'}
-                        </pre>
+                <h2 className="hr-problem-title">{question.title}</h2>
+                <div className="hr-chip-row">
+                  {question.difficulty && (
+                    <span className={`hr-diff hr-diff-${question.difficulty.toLowerCase()}`}>
+                      {question.difficulty.toLowerCase()}
+                    </span>
+                  )}
+                  <span className="hr-chip">{question.points} points</span>
+                  {question.topic && <span className="hr-chip">{question.topic}</span>}
+                </div>
+                <div className="hr-statement">{question.description}</div>
+                {sampleTests.map((tc, i) => (
+                  <div className="hr-sample" key={tc.id || i}>
+                    <h4>Sample {i + 1}</h4>
+                    <div className="hr-sample-grid">
+                      <div>
+                        <span>Input</span>
+                        <pre>{tc.input || '(empty)'}</pre>
                       </div>
                       <div>
-                        <span className="muted-text" style={{ fontSize: 11.5 }}>
-                          Expected Output:
-                        </span>
-                        <pre className="pre-code" style={{ marginTop: 4 }}>
-                          {tc.expectedOutput}
-                        </pre>
+                        <span>Expected output</span>
+                        <pre>{tc.expectedOutput}</pre>
                       </div>
                     </div>
-                  ))
-                )}
-              </>
-            )}
-
-            {activeTab === 'results' && (
-              <>
-                <span className="eyebrow">Evaluation Status</span>
-                {!currentSubmission ? (
-                  <p className="muted-text" style={{ lineHeight: 1.6 }}>
-                    Submit your code to record a submission. Automated evaluation remains{' '}
-                    <code>PENDING</code> until processed by a sandbox worker.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div className="reader-box" style={{ padding: 14 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 8,
-                        }}
-                      >
-                        <span className="muted-text">Status</span>
-                        <span
-                          className={`pill ${
-                            currentSubmission.status === 'COMPLETED'
-                              ? 'pill-success'
-                              : currentSubmission.status === 'FAILED'
-                                ? 'pill-danger'
-                                : 'pill-warning'
-                          }`}
-                        >
-                          {currentSubmission.status}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 8,
-                          marginTop: 8,
-                        }}
-                      >
-                        <span className="muted-text">Score</span>
-                        <strong className="tabular-nums">
-                          {currentSubmission.score == null
-                            ? 'Pending worker review'
-                            : `${currentSubmission.score} / ${question.points} pts`}
-                        </strong>
-                      </div>
-                    </div>
-
-                    {currentSubmission.results && currentSubmission.results.length > 0 ? (
-                      currentSubmission.results.map((res, idx) => (
-                        <div className="reader-box" key={res.id || idx} style={{ padding: 12 }}>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: 8,
-                              marginBottom: 6,
-                            }}
-                          >
-                            <span className={`pill ${res.passed ? 'pill-success' : 'pill-danger'}`}>
-                              {res.passed ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                              Case #{idx + 1}: {res.passed ? 'PASSED' : 'FAILED'}
-                            </span>
-                            {res.executionTimeMs != null && (
-                              <span className="muted-text tabular-nums" style={{ fontSize: 12 }}>
-                                {res.executionTimeMs} ms
-                              </span>
-                            )}
-                          </div>
-                          {res.actualOutput && (
-                            <pre className="pre-code" style={{ marginTop: 6 }}>
-                              {res.actualOutput}
-                            </pre>
-                          )}
-                          {res.errorMessage && (
-                            <pre
-                              className="pre-code"
-                              style={{ marginTop: 6, borderColor: 'rgba(239, 68, 68, 0.35)' }}
-                            >
-                              {res.errorMessage}
-                            </pre>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="muted-text">No per-case worker output recorded yet.</p>
-                    )}
                   </div>
-                )}
+                ))}
               </>
-            )}
-
-            {activeTab === 'history' && (
-              <>
-                <span className="eyebrow">Prior Submissions</span>
-                {!isOnline && (
-                  <p className="muted-text">
-                    Online connection required to fetch remote submission history.
-                  </p>
-                )}
-                {historyError && (
-                  <div className="inline-banner danger" role="alert">
-                    <span>{historyError}</span>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => void loadSubmissions()}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-                {previousSubmissions.length === 0 ? (
-                  <p className="muted-text">No previous submissions found for this problem.</p>
-                ) : (
-                  previousSubmissions.map((sub) => (
-                    <button
-                      type="button"
-                      key={sub.id}
-                      className="panel-item-row clickable"
-                      onClick={() => {
-                        setCurrentSubmission(sub);
-                        setActiveTab('results');
-                      }}
-                      style={{ textAlign: 'left', width: '100%' }}
-                    >
-                      <div className="panel-item-meta">
-                        <strong>
-                          {sub.language} · {sub.status}
-                        </strong>
-                        <span>{new Date(sub.createdAt).toLocaleString()}</span>
-                      </div>
-                      <span className="pill tabular-nums">
-                        {sub.score == null ? 'Pending' : `${sub.score} pts`}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </>
+            ) : history.length === 0 ? (
+              <p className="muted-text">No submissions yet.</p>
+            ) : (
+              <ul className="hr-history">
+                {history.map((s) => (
+                  <li key={s.id}>
+                    <span>
+                      <strong>{LANG_LABEL[s.language as CodeLanguage] ?? s.language}</strong>
+                      <small>{new Date(s.createdAt).toLocaleString()}</small>
+                    </span>
+                    <span className="hr-chip">
+                      {s.feedbackReleasedAt && s.score != null
+                        ? `${s.score} pts`
+                        : s.status.replaceAll('_', ' ').toLowerCase()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </section>
 
-        <div
-          className="ide-splitter"
-          role="separator"
-          tabIndex={0}
-          aria-label="Resize problem and code panels"
-          aria-orientation="vertical"
-          aria-valuenow={Math.round(splitPercent)}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            resizeSplit(event.clientX, event.currentTarget.parentElement);
-          }}
-          onPointerMove={(event) => {
-            if (event.buttons === 1) resizeSplit(event.clientX, event.currentTarget.parentElement);
-          }}
-          onKeyDown={(event) => {
-            const bounds = event.currentTarget.parentElement?.getBoundingClientRect();
-            if (!bounds) return;
-            const minPercent = (310 / bounds.width) * 100;
-            const maxPercent = 100 - (340 / bounds.width) * 100;
-            if (event.key === 'ArrowLeft')
-              setSplitPercent((value) => Math.max(minPercent, value - 2));
-            if (event.key === 'ArrowRight')
-              setSplitPercent((value) => Math.min(maxPercent, value + 2));
-          }}
-        />
-
-        {/* Right Code Editor Pane */}
-        <section className="ide-right-pane">
-          <div className="ide-toolbar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <select
-                aria-label="Programming language"
-                value={language}
-                onChange={(e) => handleLanguageChange(e.target.value as 'PYTHON' | 'JAVA' | 'CPP')}
-                className="select-control"
-                style={{ width: 150, padding: '6px 10px', fontSize: 12.5 }}
-              >
-                <option value="PYTHON">Python 3</option>
-                <option value="JAVA">Java 21</option>
-                <option value="CPP">C++ (GCC)</option>
-              </select>
-
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setFontSize((f) => Math.max(12, f - 2))}
-                  title="Decrease font size"
-                >
-                  A-
-                </button>
-                <span
-                  className="muted-text tabular-nums"
-                  style={{ fontSize: 12, padding: '0 4px' }}
-                >
-                  {fontSize}px
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setFontSize((f) => Math.min(22, f + 2))}
-                  title="Increase font size"
-                >
-                  A+
-                </button>
-              </div>
-
+        <section className="hr-pane hr-code">
+          <div className="hr-code-bar">
+            <select
+              aria-label="Language"
+              className="select-control hr-lang"
+              value={language}
+              onChange={(e) => switchLanguage(e.target.value as CodeLanguage)}
+            >
+              {(Object.keys(LANG_LABEL) as CodeLanguage[]).map((l) => (
+                <option key={l} value={l}>
+                  {LANG_LABEL[l]}
+                </option>
+              ))}
+            </select>
+            <div className="hr-code-tools">
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleResetToTemplate}
+                className="icon-btn"
+                title="Smaller text"
+                onClick={() => setFontSize((f) => Math.max(12, f - 1))}
               >
-                <RotateCcw size={13} />
-                <span>Reset</span>
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {lastSaved && (
-                <span className="muted-text" style={{ fontSize: 11.5 }}>
-                  Draft {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleSaveCheckpoint}
-              >
-                <Save size={13} />
-                <span>Save Draft</span>
+                A-
               </button>
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => void handleSubmit()}
-                disabled={submitting}
+                className="icon-btn"
+                title="Bigger text"
+                onClick={() => setFontSize((f) => Math.min(22, f + 1))}
               >
-                <Send size={13} />
-                <span>{submitting ? 'Saving…' : 'Submit Solution'}</span>
+                A+
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                title="Reset to starter code"
+                onClick={resetCode}
+              >
+                <RotateCcw size={14} />
               </button>
             </div>
           </div>
 
-          {feedbackMsg && (
-            <div
-              className="inline-banner"
-              style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none' }}
-            >
-              <span>{feedbackMsg}</span>
-            </div>
-          )}
-
-          <div className="ide-code-area">
+          <div className="hr-editor">
             <CodeEditor
               value={code}
               onChange={handleCodeChange}
               language={language}
               fontSize={fontSize}
-              onSave={handleSaveCheckpoint}
+              onSave={() => persist(code)}
+              onRun={() => void runTests()}
             />
+          </div>
+
+          <div className={`hr-console ${consoleOpen ? 'open' : ''}`}>
+            <div className="hr-console-bar">
+              <button
+                type="button"
+                className="hr-console-toggle"
+                onClick={() => setConsoleOpen((o) => !o)}
+              >
+                <Terminal size={14} /> Console
+              </button>
+              {consoleOpen && (
+                <div className="hr-tabs hr-tabs-sm">
+                  <button
+                    type="button"
+                    aria-selected={consoleTab === 'tests'}
+                    onClick={() => setConsoleTab('tests')}
+                  >
+                    Test cases
+                  </button>
+                  <button
+                    type="button"
+                    aria-selected={consoleTab === 'custom'}
+                    onClick={() => setConsoleTab('custom')}
+                  >
+                    Custom input
+                  </button>
+                </div>
+              )}
+              <div className="hr-run-buttons">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void runTests()}
+                  disabled={!canRun || running}
+                  title={
+                    canRun ? 'Run against sample tests (Ctrl+Enter)' : 'Run is available for Python'
+                  }
+                >
+                  <Play size={13} /> {running ? 'Running…' : 'Run code'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => void submit()}
+                  disabled={submitting}
+                >
+                  <Send size={13} /> {submitting ? 'Submitting…' : 'Submit'}
+                </button>
+              </div>
+            </div>
+
+            {notice && <div className={`hr-notice hr-notice-${notice.kind}`}>{notice.text}</div>}
+
+            {consoleOpen && (
+              <div className="hr-console-body">
+                {!canRun && (
+                  <p className="muted-text">
+                    Running code in the app is available for Python. Java and C++ answers are
+                    checked by your teacher after you submit.
+                  </p>
+                )}
+                {canRun && consoleTab === 'tests' && (
+                  <>
+                    {testRuns == null ? (
+                      <p className="muted-text">
+                        {sampleTests.length > 0
+                          ? 'Click “Run code” to check your solution against the sample test cases.'
+                          : 'This problem has no sample tests. Use “Custom input” to try your code.'}
+                      </p>
+                    ) : (
+                      <>
+                        <div
+                          className={`hr-summary ${passedCount === testRuns.length ? 'all' : ''}`}
+                        >
+                          {passedCount === testRuns.length ? (
+                            <CheckCircle2 size={16} />
+                          ) : (
+                            <XCircle size={16} />
+                          )}
+                          {passedCount}/{testRuns.length} sample tests passed
+                        </div>
+                        <div className="hr-cases">
+                          {testRuns.map((t) => (
+                            <details
+                              key={t.index}
+                              className={`hr-case ${t.passed ? 'pass' : 'fail'}`}
+                              open={!t.passed}
+                            >
+                              <summary>
+                                {t.passed ? <CheckCircle2 size={14} /> : <XCircle size={14} />} Test
+                                case {t.index + 1}
+                                <span className="hr-ms">
+                                  <Clock size={11} /> {t.ms} ms
+                                </span>
+                              </summary>
+                              <div className="hr-io">
+                                <div>
+                                  <span>Input</span>
+                                  <pre>{t.input || '(empty)'}</pre>
+                                </div>
+                                <div>
+                                  <span>Your output</span>
+                                  <pre>{t.actual || '(nothing printed)'}</pre>
+                                </div>
+                                <div>
+                                  <span>Expected</span>
+                                  <pre>{t.expected}</pre>
+                                </div>
+                              </div>
+                              {t.error && <pre className="hr-err">{t.error}</pre>}
+                            </details>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {canRun && consoleTab === 'custom' && (
+                  <div className="hr-custom">
+                    <label>
+                      <span>Input (stdin)</span>
+                      <textarea
+                        className="textarea-control"
+                        value={customInput}
+                        onChange={(e) => setCustomInput(e.target.value)}
+                        placeholder="Type the input your program reads with input()"
+                      />
+                    </label>
+                    <div>
+                      <span>Output</span>
+                      <pre>
+                        {customOutput
+                          ? customOutput.out || '(nothing printed)'
+                          : 'Run your code to see output.'}
+                      </pre>
+                      {customOutput?.err && <pre className="hr-err">{customOutput.err}</pre>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
       </div>

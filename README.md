@@ -4,6 +4,8 @@ Windows desktop app for students (Tauri 2 + React + TypeScript). Students sign i
 
 ## Features
 
+- **HackerRank-style challenges** — a board of all assignment questions with search and filters (status, type, difficulty, assignment). The coding workspace has the problem on the left, the editor on the right and a console with **Run code** (Python, against sample tests or custom input) and **Submit**. Python runs offline inside the app with [Pyodide](https://pyodide.org) (WebAssembly), with a 5-second time limit; Java/C++ are reviewed by the teacher.
+
 - **AI Explorers course (Class 4–5)** — 7 short lessons: What is AI, How AI learns, Input → Think → Output, AI around us, What is an LLM, Using AI safely, Good prompts. Each lesson = picture-style cards → a sorting activity → a 4-question MCQ quiz. Score 3/4 to unlock the next lesson. Works offline.
 - **Code editor with suggestions** — CodeMirror 6 with VS Code-style autocomplete for Python (builtins with hints, keywords, snippets like `def`/`for`/`if`, `math.`/`random.` members, and names you defined), plus Java and C++ highlighting. `Ctrl+S` saves a draft.
 - **Assignments** — MCQ, written and coding questions posted by teachers. Offline drafts and a submission queue that syncs when back online.

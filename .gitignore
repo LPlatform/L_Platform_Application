@@ -13,3 +13,6 @@ target/
 *.AppImage
 *.deb
 *.rpm
+
+# Generated Pyodide runtime
+public/pyodide/

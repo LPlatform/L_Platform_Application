@@ -1,37 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  BarChart3,
-  BookOpen,
-  ClipboardCheck,
-  Code2,
-  GraduationCap,
-  HelpCircle,
-  Home,
-  Library,
-  School,
-  Settings,
-} from 'lucide-react';
 import type { User, Assignment, Question } from './types';
 import { getStoredUser, clearAuthTokens, submitSolution } from './lib/api';
 import { getQueuedSubmissions, clearQueuedSubmission } from './lib/storage';
-import { Navbar } from './components/Navbar';
+import { TopNav } from './components/TopNav';
 import { Login } from './components/Login';
 import { Dashboard, type StudentSection } from './components/Dashboard';
 import { Editor } from './components/Editor';
-
-const primaryNav: Array<{
-  id: StudentSection;
-  label: string;
-  Icon: React.ComponentType<{ size?: number }>;
-}> = [
-  { id: 'overview', label: 'Home', Icon: Home },
-  { id: 'learning', label: 'AI Course', Icon: BookOpen },
-  { id: 'classes', label: 'My Classes', Icon: School },
-  { id: 'assignments', label: 'Assignments', Icon: Code2 },
-  { id: 'assessments', label: 'Tests', Icon: ClipboardCheck },
-  { id: 'results', label: 'Results', Icon: BarChart3 },
-  { id: 'library', label: 'Library', Icon: Library },
-];
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -143,75 +117,17 @@ export const App: React.FC = () => {
   const section: StudentSection = currentView === 'editor' ? 'assignments' : currentView;
 
   return (
-    <div className="desktop-shell">
-      {currentView !== 'editor' && (
-        <aside className="sidebar-nav" aria-label="Student Workspace navigation">
-          <div className="sidebar-brand">
-            <div className="sidebar-brand-mark">LP</div>
-            <div>
-              <strong>L Platform</strong>
-              <span>Student</span>
-            </div>
-          </div>
-
-          <nav className="sidebar-menu">
-            {primaryNav.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={`sidebar-item ${currentView === id ? 'active' : ''}`}
-                aria-current={currentView === id ? 'page' : undefined}
-                onClick={() => goTo(id)}
-              >
-                <span className="sidebar-item-left">
-                  <Icon size={16} />
-                  <span>{label}</span>
-                </span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="sidebar-footer">
-            <button
-              type="button"
-              className={`sidebar-item ${currentView === 'settings' ? 'active' : ''}`}
-              onClick={() => goTo('settings')}
-            >
-              <span className="sidebar-item-left">
-                <Settings size={16} />
-                <span>Settings</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`sidebar-item ${currentView === 'help' ? 'active' : ''}`}
-              onClick={() => goTo('help')}
-            >
-              <span className="sidebar-item-left">
-                <HelpCircle size={16} />
-                <span>Help &amp; Support</span>
-              </span>
-            </button>
-            <div className="sidebar-role">
-              <GraduationCap size={13} />
-              <span>{user.role.replaceAll('_', ' ').toLowerCase()}</span>
-            </div>
-          </div>
-        </aside>
-      )}
-
-      <div className="main-column">
-        <Navbar
-          user={user}
-          onLogout={logout}
-          isOnline={isOnline}
-          queuedCount={queuedCount}
-          onSync={syncQueuedSubmissions}
-          currentView={currentView}
-          onNavigateDashboard={() => goTo('assignments')}
-          onOpenSettings={() => goTo('settings')}
-        />
-
+    <div className="hr-app">
+      <TopNav
+        user={user}
+        active={currentView}
+        isOnline={isOnline}
+        queuedCount={queuedCount}
+        onNavigate={goTo}
+        onSync={syncQueuedSubmissions}
+        onLogout={logout}
+      />
+      <main className="hr-main">
         {currentView === 'editor' && selectedAssignment && selectedQuestion ? (
           <Editor
             assignment={selectedAssignment}
@@ -229,7 +145,7 @@ export const App: React.FC = () => {
             onSync={syncQueuedSubmissions}
           />
         )}
-      </div>
+      </main>
     </div>
   );
 };

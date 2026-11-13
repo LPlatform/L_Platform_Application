@@ -78,3 +78,12 @@ describe('python completions', () => {
     expect(result?.from).toBe(5);
   });
 });
+
+describe('course modules', () => {
+  it('include every lesson exactly once, in course order', async () => {
+    const { aiExplorersModules } = await import('../content/ai-explorers');
+    const ids = aiExplorersModules.flatMap((m) => m.lessonIds);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect([...ids].sort()).toEqual(aiExplorersCourse.lessons.map((l) => l.id).sort());
+  });
+});
