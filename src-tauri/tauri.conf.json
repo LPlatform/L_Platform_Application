@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "L_Platform Student",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "identifier": "com.lplatform.student",
   "build": {
     "frontendDist": "../dist",
@@ -37,6 +37,10 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "11.0"
     }
   }
 }

@@ -52,7 +52,12 @@ async function loadSecureCredentials(): Promise<void> {
 async function storeSecureCredentials(): Promise<void> {
   if (!isTauri()) return;
   const session: StoredAuth = { accessToken: authToken, refreshToken };
-  await invoke('store_auth_session', { session: JSON.stringify(session) });
+  try {
+    await invoke('store_auth_session', { session: JSON.stringify(session) });
+  } catch {
+    // macOS/Linux: no OS credential store wired up yet. Keep the session in memory only,
+    // so sign-in still works; the student signs in again after restarting the app.
+  }
 }
 
 async function renewSession(): Promise<void> {
